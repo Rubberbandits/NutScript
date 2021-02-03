@@ -9,15 +9,13 @@ ITEM.desc = "A Box that contains %s of Pistol Ammo"
 ITEM.category = "Ammunition"
 
 function ITEM:getDesc()
-	return Format(self.desc, self:getQuantity())
+	return Format(self.ammoDesc or self.desc, self:getQuantity())
 end
 
-if (CLIENT) then
-	function ITEM:paintOver(item, w, h)
-		local quantity = item:getQuantity()
-
-		nut.util.drawText(quantity, 8, 5, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, "nutChatFont")
-	end
+function ITEM:paintOver(item, w, h)
+	local quantity = item:getQuantity()
+	
+	nut.util.drawText(quantity, 8, 5, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, "nutChatFont")
 end
 
 local loadAmount = {
@@ -68,17 +66,15 @@ ITEM.functions.use = { -- sorry, for name order.
 
 		if (data > 0) then
 			local num = tonumber(data)
-			local subResult = item:addQuantity(-num)
+			item:addQuantity(-num)
 
 			item.player:GiveAmmo(num, item.ammo)
-			item.player:EmitSound("items/ammo_pickup.wav", 110)
-
-			return subResult
-		else
-			if (data == 0) then
-				item.player:GiveAmmo(item:getQuantity(), item.ammo)
-				item.player:EmitSound("items/ammo_pickup.wav", 110)
-			end
+			item.player:EmitSound(item.useSound or "items/ammo_pickup.wav", 110)
+		elseif (data == 0) then
+			item.player:GiveAmmo(item:getQuantity(), item.ammo)
+			item.player:EmitSound(item.useSound or "items/ammo_pickup.wav", 110)
+			return true
 		end
+		return item:getQuantity() <= 0
 	end,
 }

@@ -1,11 +1,14 @@
 local PANEL = {}
 	function PANEL:Init()
+		if (IsValid(nut.gui.quick)) then
+			nut.gui.quick:Remove()
+		end
 		nut.gui.quick = self
 
 		self:SetSize(400, 36)
 		self:SetPos(ScrW() - 36, -36)
 		self:MakePopup()
-		self:SetKeyBoardInputEnabled(false)
+		self:SetKeyboardInputEnabled(false)
 		self:SetZPos(999)
 		self:SetMouseInputEnabled(true)
 
@@ -27,19 +30,19 @@ local PANEL = {}
 		self.expand:SetContentAlignment(5)
 		self.expand:SetText("`")
 		self.expand:SetFont("nutIconsMedium")
-		self.expand:SetDrawBackground(false)
+		self.expand:SetPaintBackground(false)
 		self.expand:SetTextColor(color_white)
 		self.expand:SetExpensiveShadow(1, Color(0, 0, 0, 150))
 		self.expand:SetSize(36, 36)
 		self.expand.DoClick = function(this)
 			if (self.expanded) then
 				self:SizeTo(self:GetWide(), 36, 0.15, nil, nil, function()
-					self:MoveTo(ScrW() - 36, 0, 0.15)
+					self:MoveTo(ScrW() - 36, 30, 0.15)
 				end)
 
 				self.expanded = false
 			else
-				self:MoveTo(ScrW() - 400, 0, 0.15, nil, nil, function()
+				self:MoveTo(ScrW() - 400, 30, 0.15, nil, nil, function()
 					local height = 0
 
 					for k, v in pairs(self.items) do
@@ -48,7 +51,8 @@ local PANEL = {}
 						end
 					end
 
-					self:SizeTo(self:GetWide(), 36 + height, 0.15)
+					height = math.min(height, ScrH() * 0.5)
+					self:SizeTo(self:GetWide(), height, 0.15)
 				end)
 
 				self.expanded = true
@@ -59,7 +63,7 @@ local PANEL = {}
 		self.scroll:SetPos(0, 36)
 		self.scroll:SetSize(self:GetWide(), ScrH() * 0.5)
 
-		self:MoveTo(self.x, 0, 0.05)
+		self:MoveTo(self.x, 30, 0.05)
 
 		self.items = {}
 

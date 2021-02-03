@@ -1,4 +1,6 @@
 nut.db = nut.db or {}
+nut.db.queryQueue = nut.db.queue or {}
+
 nut.util.include("nutscript/gamemode/config/sv_database.lua")
 
 local function ThrowQueryFault(query, fault)
@@ -15,26 +17,49 @@ end
 
 local modules = {}
 
+-- Decorator to add callback-less overload that returns a promise instead.
+local function promisifyIfNoCallback(queryHandler)
+	return function(query, callback)
+		local d
+		local function throw(err)
+			if (d) then
+				d:reject(err)
+			else
+				ThrowQueryFault(query, err)
+			end
+		end
+		if (not isfunction(callback)) then
+			d = deferred.new()
+			callback = function(results, lastID)
+				d:resolve({results = results, lastID = lastID})
+			end
+		end
+
+		queryHandler(query, callback, throw)
+		return d
+	end
+end
+
 -- SQLite for local storage.
 modules.sqlite = {
-	query = function(query, callback)
+	query = promisifyIfNoCallback(function(query, callback, throw)
 		local data = sql.Query(query)
-		local fault = sql.LastError()
+		local err = sql.LastError()
 
 		if (data == false) then
-			ThrowQueryFault(query, fault)
+			throw(err)
 		end
 
 		if (callback) then
 			local lastID = tonumber(sql.QueryValue("SELECT last_insert_rowid()"))
-
 			callback(data, lastID)
 		end
-	end,
+	end),
 	escape = function(value)
 		return sql.SQLStr(value, true)
 	end,
 	connect = function(callback)
+		nut.db.query = modules.sqlite.query
 		if (callback) then
 			callback()
 		end
@@ -43,32 +68,28 @@ modules.sqlite = {
 
 -- tmysql4 module for MySQL storage.
 modules.tmysql4 = {
-	query = function(query, callback)
+	query = promisifyIfNoCallback(function(query, callback, throw)
 		if (nut.db.object) then
-			nut.db.object:Query(query, function(data, status, lastID)
-				if (QUERY_SUCCESS and status == QUERY_SUCCESS) then
-					if (callback) then
-						callback(data, lastID)
-					end
-				else
-					if (data and data[1]) then
-						if (data[1].status) then
-							if (callback) then
-								callback(data[1].data, data[1].lastid)
-							end
+			nut.db.object:Query(query, function(status, result)
+				if (result) then
+					result = result[1]
 
-							return
-						else
-							lastID = data[1].error
+					local queryStatus, queryError, affected, lastID, time, data = result.status, result.error, result.affected, result.lastid, result.time, result.data 
+
+					if (queryStatus and queryStatus == true) then
+						if (callback) then
+							callback(data, lastID)
 						end
 					end
-
+				else
 					file.Write("nut_queryerror.txt", query)
-					ThrowQueryFault(query, lastID or "")
+					throw(queryError) -- last ID is actually the error string.
 				end
 			end, 3)
+		else
+			nut.db.queryQueue[#nut.db.queryQueue] = {query, callback}
 		end
-	end,
+	end),
 	escape = function(value)
 		if (nut.db.object) then
 			return nut.db.object:Escape(value)
@@ -89,6 +110,7 @@ modules.tmysql4 = {
 		local object, fault = tmysql.initialize(hostname, username, password, database, port)
 
 		if (object) then
+			object:SetCharacterSet("utf8")
 			nut.db.object = object
 			nut.db.escape = modules.tmysql4.escape
 			nut.db.query = modules.tmysql4.query
@@ -108,8 +130,8 @@ PREPARE_CACHE = {}
 -- mysqloo for MySQL storage.
 nut.db.prepared = nut.db.prepared or {}
 modules.mysqloo = {
-	query = function(query, callback)
-		if (nut.db.getObject()) then
+	query = promisifyIfNoCallback(function(query, callback, throw)
+		if (nut.db.getObject and nut.db.getObject()) then
 			local object = nut.db.getObject():query(query)
 
 			if (callback) then
@@ -120,20 +142,25 @@ modules.mysqloo = {
 
 			function object:onError(fault)
 				if (nut.db.getObject():status() == mysqloo.DATABASE_NOT_CONNECTED) then
-					MYSQLOO_QUEUE[#MYSQLOO_QUEUE + 1] = {query, callback}
-					nut.db.connect()
+					nut.db.queryQueue[#nut.db.queryQueue + 1] = {
+						query,
+						callback
+					}
+					nut.db.connect(nil, true)
 
 					return
 				end
 
-				ThrowQueryFault(query, fault)
+				throw(fault)
 			end
 
 			object:start()
+		else
+			nut.db.queryQueue[#nut.db.queryQueue + 1] = {query, callback}
 		end
-	end,
+	end),
 	escape = function(value)
-		local object = nut.db.getObject()
+		local object = nut.db.getObject and nut.db.getObject()
 
 		if (object) then
 			return object:escape(value)
@@ -201,6 +228,7 @@ modules.mysqloo = {
 		for i = 1, poolNum do
 			nut.db.pool[i] = mysqloo.connect(hostname, username, password, database, port)
 			local pool = nut.db.pool[i]
+			pool:setAutoReconnect(true)
 			pool:connect()
 
 			function pool:onConnectionFailed(fault)
@@ -220,12 +248,6 @@ modules.mysqloo = {
 					nut.db.getObject = modules.mysqloo.getObject
 					nut.db.preparedCall = modules.mysqloo.preparedCall
 
-					for k, v in ipairs(MYSQLOO_QUEUE) do
-						nut.db.query(v[1], v[2])
-					end
-
-					MYSQLOO_QUEUE = {}
-
 					if (callback) then
 						callback()
 					end
@@ -234,7 +256,7 @@ modules.mysqloo = {
 				end
 			end
 
-			timer.Create("nutMySQLWakeUp" .. i, 1 + i, 0, function()
+			timer.Create("nutMySQLWakeUp" .. i, 600 + i, 0, function()
 				pool:query("SELECT 1 + 1")
 			end)
 		end
@@ -262,7 +284,7 @@ modules.mysqloo = {
 				end
 			end
 			function prepObj:onError(err)
-				print(err)
+				ServerLog(err)
 			end
 
 			local arguments = {...}
@@ -290,17 +312,28 @@ modules.mysqloo = {
 	end
 }
 
-
 -- Add default values here.
-nut.db.escape = modules.sqlite.escape
-nut.db.query = modules.sqlite.query
+nut.db.escape = nut.db.escape or modules.sqlite.escape
+nut.db.query = nut.db.query or function(...)
+	nut.db.queryQueue[#nut.db.queryQueue + 1] = {...}
+end
 
-function nut.db.connect(callback)
+function nut.db.connect(callback, reconnect)
 	local dbModule = modules[nut.db.module]
 
 	if (dbModule) then
-		if (!nut.db.object) then
-			dbModule.connect(callback)
+		if ((reconnect or not nut.db.connected) and not nut.db.object) then
+			dbModule.connect(function()
+				nut.db.connected = true
+				if (isfunction(callback)) then
+					callback()
+				end
+
+				for i = 1, #nut.db.queryQueue do
+					nut.db.query(unpack(nut.db.queryQueue[i]))
+				end
+				nut.db.queryQueue = {}
+			end)
 		end
 
 		nut.db.escape = dbModule.escape
@@ -317,12 +350,11 @@ local MYSQL_CREATE_TABLES = [[
 CREATE TABLE IF NOT EXISTS `nut_players` (
 	`_steamID` VARCHAR(20) NOT NULL COLLATE 'utf8mb4_general_ci',
 	`_steamName` VARCHAR(32) NOT NULL COLLATE 'utf8mb4_general_ci',
-	`_firstJoin` DATETIME NOT NULL,
-	`_lastJoin` DATETIME NOT NULL,
+	`_firstJoin` DATETIME,
+	`_lastJoin` DATETIME,
 	`_data` VARCHAR(255) NOT NULL COLLATE 'utf8mb4_general_ci',
-	`_intro` BINARY(1) NOT NULL,
-	PRIMARY KEY (`_steamID`),
-	UNIQUE INDEX `_steamID` (`_steamID`)
+	`_intro` BINARY(1) NULL DEFAULT 0,
+	PRIMARY KEY (`_steamID`)
 );
 
 CREATE TABLE IF NOT EXISTS `nut_characters` (
@@ -331,35 +363,40 @@ CREATE TABLE IF NOT EXISTS `nut_characters` (
 	`_name` VARCHAR(70) NOT NULL COLLATE 'utf8mb4_general_ci',
 	`_desc` VARCHAR(512) NOT NULL COLLATE 'utf8mb4_general_ci',
 	`_model` VARCHAR(255) NOT NULL COLLATE 'utf8mb4_general_ci',
-	`_attribs` VARCHAR(512) NOT NULL COLLATE 'utf8mb4_general_ci',
+	`_attribs` VARCHAR(512) DEFAULT NULL COLLATE 'utf8mb4_general_ci',
 	`_schema` VARCHAR(24) NOT NULL COLLATE 'utf8mb4_general_ci',
 	`_createTime` DATETIME NOT NULL,
 	`_lastJoinTime` DATETIME NOT NULL,
-	`_data` VARCHAR(1024) NOT NULL COLLATE 'utf8mb4_general_ci',
+	`_data` VARCHAR(1024) DEFAULT NULL COLLATE 'utf8mb4_general_ci',
 	`_money` INT(10) UNSIGNED NULL DEFAULT '0',
-	`_faction` VARCHAR(12) NOT NULL COLLATE 'utf8mb4_general_ci',
-	PRIMARY KEY (`_id`),
-	UNIQUE INDEX `_id` (`_id`)
+	`_faction` VARCHAR(24) DEFAULT NULL COLLATE 'utf8mb4_general_ci',
+	PRIMARY KEY (`_id`)
 );
 
 CREATE TABLE IF NOT EXISTS `nut_inventories` (
 	`_invID` INT(12) NOT NULL AUTO_INCREMENT,
 	`_charID` INT(12) NULL DEFAULT NULL,
 	`_invType` VARCHAR(24) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
-	PRIMARY KEY (`_invID`),
-	UNIQUE INDEX `_invID` (`_invID`)
+	PRIMARY KEY (`_invID`)
 );
 
 CREATE TABLE IF NOT EXISTS `nut_items` (
 	`_itemID` INT(12) NOT NULL AUTO_INCREMENT,
-	`_invID` INT(12) NOT NULL,
+	`_invID` INT(12) NULL DEFAULT NULL,
 	`_uniqueID` VARCHAR(60) NOT NULL COLLATE 'utf8mb4_general_ci',
 	`_data` VARCHAR(512) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
-	`_x` INT(4) NOT NULL,
-	`_y` INT(4) NOT NULL,
-	`_quantity` INT(12) NOT NULL DEFAULT '1',
-	PRIMARY KEY (`_itemID`),
-	UNIQUE INDEX `_itemID` (`_itemID`)
+	`_quantity` INT(16),
+	`_x` INT(4),
+	`_y` INT(4),
+	PRIMARY KEY (`_itemID`)
+);
+
+CREATE TABLE IF NOT EXISTS `nut_invdata` (
+	`_invID` INT(12) NOT NULL,
+	`_key` VARCHAR(32) NOT NULL COLLATE 'utf8mb4_general_ci',
+	`_value` VARCHAR(255) NOT NULL COLLATE 'utf8mb4_general_ci',
+	FOREIGN KEY (`_invID`) REFERENCES nut_inventories(_invID) ON DELETE CASCADE,
+	PRIMARY KEY (`_invID`, `_key`)
 );
 ]]
 
@@ -399,40 +436,74 @@ CREATE TABLE IF NOT EXISTS nut_items (
 	_invID integer,
 	_uniqueID varchar,
 	_data varchar,
+	_quantity integer,
 	_x integer,
-	_y integer,
-	_quantity integer
+	_y integer
 );
+
+CREATE TABLE IF NOT EXISTS nut_invdata (
+	_invID integer,
+	_key text,
+	_value text,
+	FOREIGN KEY(_invID) REFERENCES nut_inventories(_invID),
+	PRIMARY KEY (_invID, _key)
+)
 ]]
 
 local DROP_QUERY = [[
 DROP TABLE IF EXISTS `nut_players`;
 DROP TABLE IF EXISTS `nut_characters`;
 DROP TABLE IF EXISTS `nut_inventories`;
-DROP TABLE IF EXISTS `nut_items`;]]
+DROP TABLE IF EXISTS `nut_items`;
+DROP TABLE IF EXISTS `nut_invdata`;
+DROP TABLE IF EXISTS `nut_inventories`;
+]]
 
 local DROP_QUERY_LITE = [[
 DROP TABLE IF EXISTS nut_players;
 DROP TABLE IF EXISTS nut_characters;
 DROP TABLE IF EXISTS nut_inventories;
-DROP TABLE IF EXISTS nut_items;]]
+DROP TABLE IF EXISTS nut_items;
+DROP TABLE IF EXISTS nut_invdata;
+DROP TABLE IF EXISTS nut_inventories;
+]]
 
-function nut.db.wipeTables()
-	local function callback()
-		MsgC(Color(255, 0, 0), "[Nutscript] ALL NUTSCRIPT DATA HAS BEEN WIPED\n")
+function nut.db.wipeTables(callback)
+	local function realCallback()
+		nut.db.query("SET FOREIGN_KEY_CHECKS = 1;", function()
+			MsgC(
+				Color(255, 0, 0),
+				"[Nutscript] ALL NUTSCRIPT DATA HAS BEEN WIPED\n"
+			)
+			if (isfunction(callback)) then
+				callback()
+			end
+		end)
 	end
 
 	if (nut.db.object) then
-		local queries = string.Explode(";", DROP_QUERY)
-
-		for i = 1, #queries do
-			nut.db.query(queries[i], callback)
+		local function startDeleting()
+			local queries = string.Explode(";", DROP_QUERY)
+			local done = 0
+			for i = 1, #queries do
+				queries[i] = string.Trim(queries[i])
+				if (queries[i] == "") then
+					done = done + 1
+					continue
+				end
+				nut.db.query(queries[i], function()
+					done = done + 1
+					if (done >= #queries) then
+						realCallback()
+					end
+				end)
+			end
 		end
-	else
-		nut.db.query(DROP_QUERY_LITE, callback)
-	end
 
-	nut.db.loadTables()
+		nut.db.query("SET FOREIGN_KEY_CHECKS = 0;", startDeleting)
+	else
+		nut.db.query(DROP_QUERY_LITE, realCallback)
+	end
 end
 
 local resetCalled = 0
@@ -449,24 +520,59 @@ concommand.Add("nut_recreatedb", function(client, cmd, arguments)
 			MsgC(Color(255, 0, 0), "[Nutscript] DATABASE WIPE IN PROGRESS.\n")
 			
 			hook.Run("OnWipeTables")
-			nut.db.wipeTables()
+			nut.db.wipeTables(nut.db.loadTables)
 		end
 	end
 end)
 
 function nut.db.loadTables()
-	if (nut.db.object) then
+	local function done()
+		nut.db.tablesLoaded = true
+		hook.Run("NutScriptTablesLoaded")
+	end
+
+	if (nut.db.module == "sqlite") then
+		nut.db.query(SQLITE_CREATE_TABLES, done)
+	else
 		-- This is needed to perform multiple queries since the string is only 1 big query.
 		local queries = string.Explode(";", MYSQL_CREATE_TABLES)
+		local i = 1
 
-		for i = 1, 4 do
-			nut.db.query(queries[i])
+		local function doNextQuery()
+			if (i > #queries) then
+				return done()
+			end
+			local query = string.Trim(queries[i])
+			if (query == "") then
+				i = i + 1
+				return doNextQuery()
+			end
+			nut.db.query(query, function()
+				i = i + 1
+				doNextQuery()
+			end)
 		end
-	else
-		nut.db.query(SQLITE_CREATE_TABLES)
+
+		doNextQuery()
 	end
 
 	hook.Run("OnLoadTables")
+end
+
+function nut.db.waitForTablesToLoad()
+	TABLE_WAIT_ID = TABLE_WAIT_ID or 0
+
+	local d = deferred.new()
+	if (nut.db.tablesLoaded) then
+		d:resolve()
+	else
+		hook.Add("NutScriptTablesLoaded", tostring(TABLE_WAIT_ID), function()
+			d:resolve()
+		end)
+	end
+
+	TABLE_WAIT_ID = TABLE_WAIT_ID + 1
+	return d
 end
 
 function nut.db.convertDataType(value, noEscape)
@@ -482,13 +588,15 @@ function nut.db.convertDataType(value, noEscape)
 		else
 			return "'"..nut.db.escape(util.TableToJSON(value)).."'"
 		end
+	elseif (value == NULL) then
+		return "NULL"
 	end
 
 	return value
 end
 
-function nut.db.insertTable(value, callback, dbTable)
-	local query = "INSERT INTO "..("nut_"..(dbTable or "characters")).." ("
+local function genInsertValues(value, dbTable)
+	local query = "nut_"..(dbTable or "characters").." ("
 	local keys = {}
 	local values = {}
 
@@ -497,20 +605,83 @@ function nut.db.insertTable(value, callback, dbTable)
 		values[#keys] = k:find("steamID") and v or nut.db.convertDataType(v)
 	end
 
-	query = query..table.concat(keys, ", ")..") VALUES ("..table.concat(values, ", ")..")"
+	return query
+		..table.concat(keys, ", ")
+		..") VALUES ("..table.concat(values, ", ")..")"
+end
+
+local function genUpdateList(value)
+	local changes = {}
+	for k, v in pairs(value) do
+		changes[#changes + 1] = k.." = "..(k:find("steamID") and v or nut.db.convertDataType(v))
+	end
+	return table.concat(changes, ", ")
+end
+
+function nut.db.insertTable(value, callback, dbTable)
+	local query = "INSERT INTO "..genInsertValues(value, dbTable)
 	nut.db.query(query, callback)
 end
 
 function nut.db.updateTable(value, callback, dbTable, condition)
 	local query = "UPDATE "..("nut_"..(dbTable or "characters")).." SET "
-	local changes = {}
+		..genUpdateList(value)
+		..(condition and " WHERE "..condition or "")
+	nut.db.query(query, callback)
+end
 
-	for k, v in pairs(value) do
-		changes[#changes + 1] = k.." = "..(k:find("steamID") and v or nut.db.convertDataType(v))
+function nut.db.select(fields, dbTable, condition, limit)
+	local d = deferred.new()
+	local from =
+		type(fields) == "table" and table.concat(fields, ", ") or tostring(fields)
+	local tableName = "nut_"..(dbTable or "characters")
+	local query = "SELECT "..from.." FROM "..tableName
+
+	if (condition) then
+		query = query.." WHERE "..tostring(condition)
 	end
 
-	query = query..table.concat(changes, ", ")..(condition and " WHERE "..condition or "")
-	nut.db.query(query, callback)
+	if (limit) then
+		query = query.." LIMIT "..tostring(limit)
+	end
+
+	nut.db.query(query, function(results, lastID)
+		d:resolve({results = results, lastID = lastID})
+	end)
+	return d
+end
+
+function nut.db.upsert(value, dbTable)
+	local query
+	if (nut.db.object) then
+		query = "INSERT INTO "..genInsertValues(value, dbTable)
+			.." ON DUPLICATE KEY UPDATE "
+			..genUpdateList(value)
+	else
+		query = "INSERT OR REPLACE INTO "..genInsertValues(value, dbTable)
+	end
+
+	local d = deferred.new()
+	nut.db.query(query, function(results, lastID)
+		d:resolve({results = results, lastID = lastID})
+	end)
+	return d
+end
+
+function nut.db.delete(dbTable, condition)
+	local query
+	dbTable = "nut_"..(dbTable or "character")
+	if (condition) then
+		query = "DELETE FROM "..dbTable.." WHERE "..condition
+	else
+		query = "DELETE * FROM "..dbTable
+	end
+
+	local d = deferred.new()
+	nut.db.query(query, function(results, lastID)
+		d:resolve({results = results, lastID = lastID})
+	end)
+	return d
 end
 
 function GM:OnMySQLOOConnected()
@@ -522,14 +693,16 @@ MYSQLOO_INTEGER = 0
 MYSQLOO_STRING = 1
 MYSQLOO_BOOL = 2
 function GM:RegisterPreparedStatements()
-	MsgC(Color(0, 255, 0), "[Nutscript] ADDED 2 PREPARED STATEMENTS\n")
-	nut.db.prepare("itemQuantity", "UPDATE nut_items SET _quantity = ? WHERE _itemID = ?", {MYSQLOO_INTEGER, MYSQLOO_INTEGER})
+	MsgC(Color(0, 255, 0), "[Nutscript] ADDED 5 PREPARED STATEMENTS\n")
 	nut.db.prepare("itemData", "UPDATE nut_items SET _data = ? WHERE _itemID = ?", {MYSQLOO_STRING, MYSQLOO_INTEGER})
-	nut.db.prepare("itemInstance", "INSERT INTO nut_items (_quantity, _invID, _uniqueID, _data, _x, _y) VALUES (?, ?, ?, ?, ?, ?)", {
-		MYSQLOO_INTEGER,
+	nut.db.prepare("itemx", "UPDATE nut_items SET _x = ? WHERE _itemID = ?", {MYSQLOO_INTEGER, MYSQLOO_INTEGER})
+	nut.db.prepare("itemy", "UPDATE nut_items SET _y = ? WHERE _itemID = ?", {MYSQLOO_INTEGER, MYSQLOO_INTEGER})
+	nut.db.prepare("itemq", "UPDATE nut_items SET _quantity = ? WHERE _itemID = ?", {MYSQLOO_INTEGER, MYSQLOO_INTEGER})
+	nut.db.prepare("itemInstance", "INSERT INTO nut_items (_invID, _uniqueID, _data, _x, _y, _quantity) VALUES (?, ?, ?, ?, ?, ?)", {
 		MYSQLOO_INTEGER,
 		MYSQLOO_STRING,
 		MYSQLOO_STRING,
+		MYSQLOO_INTEGER,
 		MYSQLOO_INTEGER,
 		MYSQLOO_INTEGER,
 	})

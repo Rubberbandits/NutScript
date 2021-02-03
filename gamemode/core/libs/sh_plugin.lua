@@ -2,51 +2,60 @@ nut.plugin = nut.plugin or {}
 nut.plugin.list = nut.plugin.list or {}
 nut.plugin.unloaded = nut.plugin.unloaded or {}
 
-HOOKS_CACHE = {}
-
 function nut.plugin.load(uniqueID, path, isSingleFile, variable)
+	variable = uniqueID == "schema" and "SCHEMA" or variable or "PLUGIN"
 	if (hook.Run("PluginShouldLoad", uniqueID) == false) then return end
 
-	variable = variable or "PLUGIN"
+	-- Do not load non-existent plugins.
+	if (
+		not isSingleFile and
+		not file.Exists(path.."/sh_"..variable:lower()..".lua", "LUA")
+	) then
+		return
+	end
 
-	-- Plugins within plugins situation?
+	-- Create a table to store plugin information.
 	local oldPlugin = PLUGIN
-	local PLUGIN = {folder = path, plugin = oldPlugin, uniqueID = uniqueID, name = "Unknown", desc = "Description not available", author = "Anonymous"}
+	local PLUGIN = {
+		folder = path,
+		plugin = oldPlugin,
+		uniqueID = uniqueID,
+		name = "Unknown",
+		desc = "Description not available",
+		author = "Anonymous",
+		IsValid = function(plugin) return true end
+	}
 
 	if (uniqueID == "schema") then
+		-- If the plugin is actually the schema, overwrite delevant variables.
 		if (SCHEMA) then
 			PLUGIN = SCHEMA
 		end
-
 		variable = "SCHEMA"
 		PLUGIN.folder = engine.ActiveGamemode()
 	elseif (nut.plugin.list[uniqueID]) then
+		-- Handle auto-reload.
 		PLUGIN = nut.plugin.list[uniqueID]
 	end
 
+	-- Expose PLUGIN as a global so the plugin files can access the table.
 	_G[variable] = PLUGIN
+
+	-- Then include all of the plugin files so they run.
 	PLUGIN.loading = true
+	PLUGIN.path = path
 
-	if (!isSingleFile) then
-		nut.util.includeDir(path.."/libs", true, true)
-		nut.attribs.loadFromDir(path.."/attributes")
-		nut.faction.loadFromDir(path.."/factions")
-		nut.class.loadFromDir(path.."/classes")
-		nut.item.loadFromDir(path.."/items")
-		nut.util.includeDir(path.."/derma", true)
-		nut.plugin.loadEntities(path.."/entities")
-		nut.lang.loadFromDir(path.."/languages")
-		nut.plugin.loadFromDir(path.."/plugins")
-
-		hook.Run("DoPluginIncludes", path, PLUGIN)
+	if (not isSingleFile) then
+		nut.plugin.loadExtras(path)
 	end
-
-	nut.util.include(isSingleFile and path or path.."/sh_"..variable:lower()..".lua", "shared")
-
+	nut.util.include(
+		isSingleFile and path or path.."/sh_"..variable:lower()..".lua",
+		"shared"
+	)
 	PLUGIN.loading = false
 
+	-- Add helper methods for persistent data.
 	local uniqueID2 = uniqueID
-
 	if (uniqueID2 == "schema") then
 		uniqueID2 = PLUGIN.name
 	end
@@ -56,54 +65,59 @@ function nut.plugin.load(uniqueID, path, isSingleFile, variable)
 	end
 
 	function PLUGIN:getData(default, global, ignoreMap, refresh)
-		return nut.data.get(uniqueID2, default, global, ignoreMap, refresh) or {}
+		return nut.data.get(uniqueID2, default, global, ignoreMap, refresh)
+			or {}
 	end
 
-	hook.Run("PluginLoaded", uniqueID, PLUGIN)
-
-	if (uniqueID != "schema") then
-		PLUGIN.name = PLUGIN.name or "Unknown"
-		PLUGIN.desc = PLUGIN.desc or "No description available."
-
-		if (!PLUGIN.IsValid) then
-			function PLUGIN:IsValid()
-				-- if you gonna return false of this, you should remove/make nil your PLUGIN table! 
-				return true
-			end
+	-- Add listeners for the plugin hooks so they run.
+	for k, v in pairs(PLUGIN) do
+		if (type(v) == "function") then
+			hook.Add(k, PLUGIN, v)
 		end
+	end
 
-		for k, v in pairs(PLUGIN) do
-			if (type(v) == "function") then
-				hook.Add(k, PLUGIN, v)
-			end
-		end
-
-		nut.plugin.list[uniqueID] = PLUGIN
-		_G[variable] = nil
+	-- Store a reference to the plugin for later access.
+	if (uniqueID == "schema") then
+		function PLUGIN:IsValid() return true end
 	else
-		-- no matter what you should be loaded.
-		function PLUGIN:IsValid()
-			return true
-		end
-
-		for k, v in pairs(PLUGIN) do
-			if (type(v) == "function") then
-				hook.Add(k, PLUGIN, v)
-			end
-		end
+		nut.plugin.list[uniqueID] = PLUGIN
+		_G[variable] = oldPlugin
 	end
 
+	-- Signal that a plugin has finished loading.
+	hook.Run("PluginLoaded", uniqueID, PLUGIN)
 	if (PLUGIN.OnLoaded) then
 		PLUGIN:OnLoaded()
 	end
+end
+
+function nut.plugin.loadExtras(path)
+	nut.util.includeDir(path.."/libs", true, true)
+	nut.faction.loadFromDir(path.."/factions")
+	nut.class.loadFromDir(path.."/classes")
+	nut.util.includeDir(path.."/derma", true)
+	nut.plugin.loadEntities(path.."/entities")
+	nut.lang.loadFromDir(path.."/languages")
+	nut.plugin.loadFromDir(path.."/plugins")
+
+	hook.Run("DoPluginIncludes", path, PLUGIN)
+
+	local hookID = "nutItems"..path
+	hook.Add("InitializedPlugins", hookID, function()
+		nut.item.loadFromDir(path.."/items")
+		hook.Remove("InitializedPlugins", hookID)
+	end)
 end
 
 function nut.plugin.loadEntities(path)
 	local files, folders
 
 	local function IncludeFiles(path2, clientOnly)
-		if (SERVER and file.Exists(path2.."init.lua", "LUA") or CLIENT) then
-			nut.util.include(path2.."init.lua", clientOnly and "client" or "server")
+		if ((SERVER and file.Exists(path2.."init.lua", "LUA")) or (CLIENT and file.Exists(path2.."cl_init.lua", "LUA"))) then
+			nut.util.include(
+				path2.."init.lua",
+				clientOnly and "client" or "server"
+			)
 
 			if (file.Exists(path2.."cl_init.lua", "LUA")) then
 				nut.util.include(path2.."cl_init.lua", "client")
@@ -111,7 +125,7 @@ function nut.plugin.loadEntities(path)
 
 			return true
 		elseif (file.Exists(path2.."shared.lua", "LUA")) then
-			nut.util.include(path2.."shared.lua")
+			nut.util.include(path2.."shared.lua", "shared")
 
 			return true
 		end
@@ -119,7 +133,9 @@ function nut.plugin.loadEntities(path)
 		return false
 	end
 
-	local function HandleEntityInclusion(folder, variable, register, default, clientOnly)
+	local function HandleEntityInclusion(
+		folder, variable, register, default, clientOnly
+	)
 		files, folders = file.Find(path.."/"..folder.."/*", "LUA")
 		default = default or {}
 
@@ -129,7 +145,7 @@ function nut.plugin.loadEntities(path)
 			_G[variable] = table.Copy(default)
 				_G[variable].ClassName = v
 
-				if (IncludeFiles(path2, clientOnly) and !client) then
+				if (IncludeFiles(path2, clientOnly) and not client) then
 					if (clientOnly) then
 						if (CLIENT) then
 							register(_G[variable], v)
@@ -146,7 +162,10 @@ function nut.plugin.loadEntities(path)
 
 			_G[variable] = table.Copy(default)
 				_G[variable].ClassName = niceName
-				nut.util.include(path.."/"..folder.."/"..v, clientOnly and "client" or "shared")
+				nut.util.include(
+					path.."/"..folder.."/"..v,
+					clientOnly and "client" or "shared"
+				)
 
 				if (clientOnly) then
 					if (CLIENT) then
@@ -174,17 +193,21 @@ function nut.plugin.loadEntities(path)
 	})
 
 	-- Include effects.
-	HandleEntityInclusion("effects", "EFFECT", effects and effects.Register, nil, true)
+	HandleEntityInclusion(
+		"effects", "EFFECT", effects and effects.Register, nil, true
+	)
 end
 
-DATA_INIT = DATA_INIT or false
 function nut.plugin.initialize()
+	nut.plugin.loadFromDir(engine.ActiveGamemode().."/preload")
+
 	nut.plugin.load("schema", engine.ActiveGamemode().."/schema")
 	hook.Run("InitializedSchema")
 
 	nut.plugin.loadFromDir("nutscript/plugins")
 	nut.plugin.loadFromDir(engine.ActiveGamemode().."/plugins")
 	hook.Run("InitializedPlugins")
+	hook.Run("InitializedItems")
 end
 
 function nut.plugin.loadFromDir(directory)
@@ -199,44 +222,18 @@ function nut.plugin.loadFromDir(directory)
 	end
 end
 
-function nut.plugin.setUnloaded(uniqueID, state, noSave)
-	local plugin = nut.plugin.list[uniqueID]
+function nut.plugin.setDisabled(uniqueID, disabled)
+	disabled = tobool(disabled)
 
-	if (state) then
-		if (plugin.onLoaded) then
-			plugin:onLoaded()
-		end
+	local oldData = table.Copy(nut.data.get("unloaded", {}, false, true))
+	oldData[uniqueID] = disabled
+	nut.data.set("unloaded", oldData, false, true, true)
+end
 
-		if (nut.plugin.unloaded[uniqueID]) then
-			nut.plugin.list[uniqueID] = nut.plugin.unloaded[uniqueID]
-			nut.plugin.unloaded[uniqueID] = nil
-		else
-			return false
-		end
-	elseif (plugin) then
-		if (plugin.onUnload) then
-			plugin:onUnload()
-		end
-
-		nut.plugin.unloaded[uniqueID] = nut.plugin.list[uniqueID]
-		nut.plugin.list[uniqueID] = nil
-	else
-		return false
+function nut.plugin.isDisabled(uniqueID)
+	if (istable(DISABLED_PLUGINS) and DISABLED_PLUGINS[uniqueID]) then
+		return true
 	end
 
-	if (SERVER and !noSave) then
-		local status
-
-		if (state) then
-			status = true
-		end
-
-		local unloaded = nut.data.get("unloaded", {}, true, true)
-			unloaded[uniqueID] = status
-		nut.data.set("unloaded", unloaded, true, true)
-	end
-
-	hook.Run("PluginUnloaded", uniqueID)
-
-	return true
+	return nut.data.get("unloaded", {}, false, true)[uniqueID] == true
 end

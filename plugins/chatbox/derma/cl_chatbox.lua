@@ -1,10 +1,6 @@
 local PANEL = {}
-	local gradient = Material("vgui/gradient-d")
-	local gradient2 = Material("vgui/gradient-u")
-
 	local COLOR_FADED = Color(200, 200, 200, 100)
 	local COLOR_ACTIVE = color_white
-	local COLOR_WRONG = Color(255, 100, 80)
 
 	function PANEL:Init()
 		local border = 32
@@ -20,16 +16,19 @@ local PANEL = {}
 
 		self.tabs = self:Add("DPanel")
 		self.tabs:Dock(TOP)
-		self.tabs:SetTall(24)
-		self.tabs:DockPadding(3, 3, 3, 3)
-		self.tabs:DockMargin(4, 4, 4, 4)
+		self.tabs:SetTall(28)
+		self.tabs:DockPadding(4, 4, 4, 4)
 		self.tabs:SetVisible(false)
+		self.tabs.Paint = function(tabs, w, h)
+			surface.SetDrawColor(0, 0, 0, 100)
+			surface.DrawRect(0, 0, w, h)
+		end
 
 		self.arguments = {}
 
 		self.scroll = self:Add("DScrollPanel")
-		self.scroll:SetPos(4, 30)
-		self.scroll:SetSize(w - 8, h - 70)
+		self.scroll:SetPos(4, 31)
+		self.scroll:SetSize(w - 8, h - 66)
 		self.scroll:GetVBar():SetWide(0)
 		self.scroll.PaintOver = function(this, w, h)
 			local entry = self.text
@@ -53,7 +52,7 @@ local PANEL = {}
 						local k2 = "/"..k
 
 						if (k2:match(command)) then
-							local x, y = nut.util.drawText(k2.."  ", 4, i * 20, color)
+							local x = nut.util.drawText(k2.."  ", 4, i * 20, color)
 
 							if (k == command and v.syntax) then
 								local i2 = 0
@@ -121,8 +120,8 @@ local PANEL = {}
 			self.entry = self:Add("EditablePanel")
 			self.entry:SetPos(self.x + 4, self.y + self:GetTall() - 32)
 			self.entry:SetWide(self:GetWide() - 8)
-			self.entry.Paint = function(this, w, h)
-			end
+			--self.entry.Paint = function(this, w, h)
+			--end
 			self.entry.OnRemove = function()
 				hook.Run("FinishChat")
 			end
@@ -134,7 +133,7 @@ local PANEL = {}
 			self.text:Dock(FILL)
 			self.text.History = nut.chat.history
 			self.text:SetHistoryEnabled(true)
-			self.text:DockMargin(3, 3, 3, 3)
+			self.text:DockMargin(0, 0, 0, 0)
 			self.text:SetFont("nutChatFont")
 			self.text.OnEnter = function(this)
 				local text = this:GetText()
@@ -259,17 +258,17 @@ local PANEL = {}
 		if (CHAT_CLASS) then
 			text = "<font="..(CHAT_CLASS.font or "nutChatFont")..">"
 		end
-		
+
 		for k, v in ipairs({...}) do
 			if (type(v) == "IMaterial") then
 				local ttx = v:GetName()
 				text = text.."<img="..ttx..","..v:Width().."x"..v:Height()..">"
-			elseif (type(v) == "table" and v.r and v.g and v.b) then
+			elseif (IsColor(v) and v.r and v.g and v.b) then
 				text = text.."<color="..v.r..","..v.g..","..v.b..">"
 			elseif (type(v) == "Player") then
 				local color = team.GetColor(v:Team())
 
-				text = text.."<color="..color.r..","..color.g..","..color.b..">"..v:Name():gsub("<", "&lt;"):gsub(">", "&gt;")
+				text = text.."<color="..color.r..","..color.g..","..color.b..">"..v:Name():gsub("<", "&lt;"):gsub(">", "&gt;"):gsub("#", "\226\128\139#")
 			else
 				text = text..tostring(v):gsub("<", "&lt;"):gsub(">", "&gt;")
 				text = text:gsub("%b**", function(value)

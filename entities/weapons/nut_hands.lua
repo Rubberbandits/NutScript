@@ -7,7 +7,6 @@ if (CLIENT) then
 	SWEP.Slot = 0
 	SWEP.SlotPos = 1
 	SWEP.DrawAmmo = false
-	SWEP.DrawCrosshair = false
 end
 
 SWEP.Author = "Chessnut / Black Tea"
@@ -338,8 +337,7 @@ function SWEP:PrimaryAttack()
 	end
 
 	if (IsValid(self.holdingEntity)) then
-		self:doPickup(self:GetOwner():isWepRaised())
-
+		self:doPickup(not self.isWepRaised or self:GetOwner():isWepRaised())
 		return
 	end
 
@@ -349,7 +347,7 @@ function SWEP:PrimaryAttack()
 		return
 	end
 
-	local staminaUse = nut.config.get("punchStamina")
+	local staminaUse = nut.config.get("punchStamina", 10)
 
 	if (staminaUse > 0) then
 		local value = self.Owner:getLocalVar("stm", 0) - staminaUse
@@ -407,13 +405,13 @@ function SWEP:SecondaryAttack()
 			self:SetNextSecondaryFire(CurTime() + 0.4)
 			self:SetNextPrimaryFire(CurTime() + 1)
 		elseif (!entity:IsPlayer() and !entity:IsNPC()) then
-			self:doPickup(false, entity)
+			self:doPickup(false, entity, trace)
 		elseif (IsValid(self.heldEntity) and !self.heldEntity:IsPlayerHolding()) then
 			self.heldEntity = nil
 		end
 	else
 		if (IsValid(self.holdingEntity)) then
-			self:doPickup(false)
+			self:doPickup(false, nil, trace)
 		end
 	end
 end
@@ -457,7 +455,7 @@ function SWEP:allowPickup(target)
 		)
 end
 
-function SWEP:doPickup(throw, entity)
+function SWEP:doPickup(throw, entity, trace)
 	self.Weapon:SetNextPrimaryFire( CurTime() + .1 )
 	self.Weapon:SetNextSecondaryFire( CurTime() + .1 )
 
@@ -473,6 +471,7 @@ function SWEP:doPickup(throw, entity)
 		local phys = entity:GetPhysicsObject()
 		
 		if (!IsValid(phys) or !phys:IsMoveable() or phys:HasGameFlag(FVPHYSICS_PLAYER_HELD)) then
+			hook.Run("OnPickupObject", false, self.Owner, entity)
 			return
 		end
 			
@@ -480,13 +479,14 @@ function SWEP:doPickup(throw, entity)
 		if (SERVER) then
 			if (client:EyePos() - (entity:GetPos() + entity:OBBCenter())):Length() < self:getRange(entity) then
 				if (self:allowPickup(entity)) then
-					self:pickup(entity)
-					self.Weapon:SendWeaponAnim( ACT_VM_HITCENTER )
+					self:pickup(entity, trace)
+					self:SendWeaponAnim(ACT_VM_HITCENTER) 
 						
 					-- make the refire slower to avoid immediately dropping
 					local delay = (entity:GetClass() == "prop_ragdoll") and 0.8 or 0.1
 						
-					self.Weapon:SetNextSecondaryFire(CurTime() + delay)
+					hook.Run("OnPickupObject", true, self.Owner, entity)
+					self:SetNextSecondaryFire(CurTime() + delay)
 					return
 				else
 					local is_ragdoll = entity:GetClass() == "prop_ragdoll"
@@ -518,7 +518,7 @@ function SWEP:doPickup(throw, entity)
 end
 
 -- Perform a pickup
-function SWEP:pickup(entity)
+function SWEP:pickup(entity, trace)
 	if (CLIENT or IsValid(self.holdingEntity)) then return end
 
 	local client = self:GetOwner()

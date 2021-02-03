@@ -1,14 +1,17 @@
 ITEM.name = "Outfit"
 ITEM.desc = "A Outfit Base."
 ITEM.category = "Outfit"
-ITEM.model = "models/Gibs/HGIBS.mdl"
+ITEM.model = "models/props_c17/BriefCase001a.mdl"
 ITEM.width = 1
 ITEM.height = 1
 ITEM.outfitCategory = "model"
 ITEM.pacData = {}
 
+-- ITEM.armor = 25 -- How much armor to add/remove upon wearing/removing.
+
 --[[
--- This will change a player's skin after changing the model. Keep in mind it starts at 0.
+-- This will change a player's skin after changing the model.
+-- Keep in mind it starts at 0.
 ITEM.newSkin = 1
 -- This will change a certain part of the model.
 ITEM.replacements = {"group01", "group02"}
@@ -25,6 +28,12 @@ ITEM.bodyGroups = {
 	["blade"] = 1,
 	["bladeblur"] = 1
 }
+
+-- You can also use PAC (if installed) to setup an outfit. Go to your outfit's
+-- file in your GMod's data folder. Copy the contents.
+ITEM.pacData = {
+	-- PASTE CONTENT HERE>
+}
 ]]
 
 -- Inventory drawing
@@ -40,68 +49,83 @@ end
 
 function ITEM:removeOutfit(client)
 	local character = client:getChar()
-	
-	self:setData("equip", false)
 
-	if (character:getData("oldMdl")) then
-		character:setModel(character:getData("oldMdl"))
+	self:setData("equip", nil)
+
+	-- Revert the model, skin, and bodygroups.
+	if (hook.Run("CanOutfitChangeModel", self) != false) then
+		character:setModel(character:getData("oldMdl", character:getModel()))
 		character:setData("oldMdl", nil)
-	end
 
-	if (self.newSkin) then
-		if (character:getData("oldSkin")) then
-			client:SetSkin(character:getData("oldSkin"))
-			character:setData("oldSkin", nil)
-		else
-			client:SetSkin(0)
-		end
-	end
+		client:SetSkin(character:getData("oldSkin", character:getData("skin", 0)))
+		character:setData("oldSkin", nil)
 
-	for k, v in pairs(self.bodyGroups or {}) do
-		local index = client:FindBodygroupByName(k)
+		for k, v in pairs(self.bodyGroups or {}) do
+			local index = client:FindBodygroupByName(k)
 
-		if (index > -1) then
-			client:SetBodygroup(index, 0)
+			if (index > -1) then
+				client:SetBodygroup(index, 0)
 
-			local groups = character:getData("groups", {})
+				local groups = character:getData("groups", {})
 
-			if (groups[index]) then
-				groups[index] = nil
-				character:setData("groups", groups)
+				if (groups[index]) then
+					groups[index] = nil
+					character:setData("groups", groups)
+				end
 			end
 		end
 	end
 
+	-- Then, remove PAC parts from this outfit.
+	if (self.pacData and client.removePart) then
+		client:removePart(self.uniqueID)
+	end
+
+	-- Remove any boosts.
 	if (self.attribBoosts) then
 		for k, _ in pairs(self.attribBoosts) do
 			character:removeBoost(self.uniqueID, k)
 		end
 	end
+
+	-- Remove armor added by this item.
+	if (isnumber(self.armor)) then
+		client:SetArmor(math.max(client:Armor() - self.armor, 0))
+	end
+
+	self:call("onTakeOff", client)
 end
 
--- On item is dropped, Remove a weapon from the player and keep the ammo in the item.
+function ITEM:wearOutfit(client, isForLoadout)
+	if (isnumber(self.armor)) then
+		client:SetArmor(client:Armor() + self.armor)
+	end
+	if (self.pacData and client.addPart) then
+		client:addPart(self.uniqueID)
+	end
+
+	self:call("onWear", client, nil, isForLoadout)
+end
+
 ITEM:hook("drop", function(item)
 	if (item:getData("equip")) then
 		item:removeOutfit(item.player)
 	end
 end)
 
--- On player uneqipped the item, Removes a weapon from the player and keep the ammo in the item.
 ITEM.functions.EquipUn = { -- sorry, for name order.
 	name = "Unequip",
 	tip = "equipTip",
 	icon = "icon16/cross.png",
 	onRun = function(item)
 		item:removeOutfit(item.player)
-
 		return false
 	end,
 	onCanRun = function(item)
-		return (!IsValid(item.entity) and item:getData("equip") == true)
+		return not IsValid(item.entity) and item:getData("equip") == true
 	end
 }
 
--- On player eqipped the item, Gives a weapon to player and load the ammo data from the item.
 ITEM.functions.Equip = {
 	name = "Equip",
 	tip = "equipTip",
@@ -110,77 +134,93 @@ ITEM.functions.Equip = {
 		local char = item.player:getChar()
 		local items = char:getInv():getItems()
 
-		for k, v in pairs(items) do
-			if (v.id != item.id) then
-				local itemTable = nut.item.instances[v.id]
-
-				if (itemTable.pacData and v.outfitCategory == item.outfitCategory and itemTable:getData("equip")) then
-					item.player:notify("You're already equipping this kind of outfit")
-
-					return false
-				end
+		for id, other in pairs(items) do
+			if (
+				item ~= other and
+				item.outfitCategory == other.outfitCategory and
+				other:getData("equip")
+			) then
+				item.player:notifyLocalized("sameOutfitCategory")
+				return false
 			end
 		end
 
 		item:setData("equip", true)
 
-		if (type(item.onGetReplacement) == "function") then
-			char:setData("oldMdl", char:getData("oldMdl", item.player:GetModel()))
-			char:setModel(item:onGetReplacement())
-		elseif (item.replacement or item.replacements) then
-			char:setData("oldMdl", char:getData("oldMdl", item.player:GetModel()))
+		if (hook.Run("CanOutfitChangeModel", item) != false) then
+			char:setData(
+				"oldMdl",
+				char:getData("oldMdl", item.player:GetModel())
+			)
 
-			if (type(item.replacements) == "table") then
-				if (#item.replacements == 2 and type(item.replacements[1]) == "string") then
-					char:setModel(item.player:GetModel():gsub(item.replacements[1], item.replacements[2]))
+			-- Do model substitutions.
+			if (type(item.onGetReplacement) == "function") then
+				char:setModel(item:onGetReplacement())
+			elseif (item.replacement or item.replacements) then
+				if (type(item.replacements) == "table") then
+					if (
+						#item.replacements == 2 and isstring(item.replacements[1])
+					) then
+						local newModel = item.player:GetModel():lower():gsub(
+							item.replacement[1],
+							item.replacements[2]
+						):lower()
+						char:setModel(newModel)
+					else
+						for k, v in ipairs(item.replacements) do
+							char:setModel(item.player:GetModel():gsub(v[1], v[2]))
+						end
+					end
 				else
-					for k, v in ipairs(item.replacements) do
-						char:setModel(item.player:GetModel():gsub(v[1], v[2]))
+					char:setModel(tostring(item.replacement or item.replacements))
+				end
+			end
+
+			-- Then apply the new skin for the model.
+			if (isnumber(item.newSkin)) then
+				char:setData("oldSkin", item.player:GetSkin())
+				char:setData("skin", item.newSkin)
+				item.player:SetSkin(item.newSkin)
+			end
+
+			-- Then set appropriate body groups for the model.
+			if (istable(item.bodyGroups)) then
+				local groups = {}
+
+				for k, value in pairs(item.bodyGroups) do
+					local index = item.player:FindBodygroupByName(k)
+
+					if (index > -1) then
+						groups[index] = value
 					end
 				end
-			else
-				char:setModel(item.replacement or item.replacements)
-			end
-		end
 
-		if (item.newSkin) then
-			char:setData("oldSkin", item.player:GetSkin())
-			item.player:SetSkin(item.newSkin)
-		end
+				local newGroups = char:getData("groups", {})
 
-		if (item.bodyGroups) then
-			local groups = {}
+				for index, value in pairs(groups) do
+					newGroups[index] = value
+					item.player:SetBodygroup(index, value)
+				end
 
-			for k, value in pairs(item.bodyGroups) do
-				local index = item.player:FindBodygroupByName(k)
-
-				if (index > -1) then
-					groups[index] = value
+				if (table.Count(newGroups) > 0) then
+					char:setData("groups", newGroups)
 				end
 			end
+		end
 
-			local newGroups = char:getData("groups", {})
-
-			for index, value in pairs(groups) do
-				newGroups[index] = value
-				item.player:SetBodygroup(index, value)
-			end
-
-			if (table.Count(newGroups) > 0) then
-				char:setData("groups", newGroups)
+		-- And add any attribute boosts.
+		if (istable(item.attribBoosts)) then
+			for attribute, boost in pairs(item.attribBoosts) do
+				char:addBoost(item.uniqueID, attribute, boost)
 			end
 		end
 
-		if (item.attribBoosts) then
-			for k, v in pairs(item.attribBoosts) do
-				char:addBoost(item.uniqueID, k, v)
-			end
-		end
+		item:wearOutfit(item.player, false)
 
 		return false
 	end,
 	onCanRun = function(item)
-		return (!IsValid(item.entity) and item:getData("equip") != true)
+		return not IsValid(item.entity) and item:getData("equip") ~= true
 	end
 }
 
@@ -190,4 +230,25 @@ function ITEM:onCanBeTransfered(oldInventory, newInventory)
 	end
 
 	return true
+end
+
+function ITEM:onLoadout()
+	if (self:getData("equip")) then
+		self:wearOutfit(self.player, true)
+	end
+end
+
+function ITEM:onRemoved()
+	local inv = nut.item.inventories[self.invID]
+	if (IsValid(receiver) and receiver:IsPlayer()) then
+		if (self:getData("equip")) then
+			self:removeOutfit(receiver)
+		end
+	end
+end
+
+function ITEM:onWear(isFirstTime)
+end
+
+function ITEM:onTakeOff()
 end

@@ -2,7 +2,7 @@ function GM:PlayerNoClip(client)
 	return client:IsAdmin()
 end
 
-HOLDTYPE_TRANSLATOR = {}
+HOLDTYPE_TRANSLATOR = HOLDTYPE_TRANSLATOR or {}
 HOLDTYPE_TRANSLATOR[""] = "normal"
 HOLDTYPE_TRANSLATOR["physgun"] = "smg"
 HOLDTYPE_TRANSLATOR["ar2"] = "smg"
@@ -10,24 +10,24 @@ HOLDTYPE_TRANSLATOR["crossbow"] = "shotgun"
 HOLDTYPE_TRANSLATOR["rpg"] = "shotgun"
 HOLDTYPE_TRANSLATOR["slam"] = "normal"
 HOLDTYPE_TRANSLATOR["grenade"] = "grenade"
-HOLDTYPE_TRANSLATOR["fist"] = "normal"
 HOLDTYPE_TRANSLATOR["melee2"] = "melee"
-HOLDTYPE_TRANSLATOR["passive"] = "normal"
+HOLDTYPE_TRANSLATOR["passive"] = "smg"
 HOLDTYPE_TRANSLATOR["knife"] = "melee"
 HOLDTYPE_TRANSLATOR["duel"] = "pistol"
 HOLDTYPE_TRANSLATOR["camera"] = "smg"
 HOLDTYPE_TRANSLATOR["magic"] = "normal"
 HOLDTYPE_TRANSLATOR["revolver"] = "pistol"
 
-PLAYER_HOLDTYPE_TRANSLATOR = {}
+PLAYER_HOLDTYPE_TRANSLATOR = PLAYER_HOLDTYPE_TRANSLATOR or {}
 PLAYER_HOLDTYPE_TRANSLATOR[""] = "normal"
+PLAYER_HOLDTYPE_TRANSLATOR["normal"] = "normal"
+PLAYER_HOLDTYPE_TRANSLATOR["revolver"] = "normal"
 PLAYER_HOLDTYPE_TRANSLATOR["fist"] = "normal"
 PLAYER_HOLDTYPE_TRANSLATOR["pistol"] = "normal"
 PLAYER_HOLDTYPE_TRANSLATOR["grenade"] = "normal"
 PLAYER_HOLDTYPE_TRANSLATOR["melee"] = "normal"
 PLAYER_HOLDTYPE_TRANSLATOR["slam"] = "normal"
 PLAYER_HOLDTYPE_TRANSLATOR["melee2"] = "normal"
-PLAYER_HOLDTYPE_TRANSLATOR["passive"] = "normal"
 PLAYER_HOLDTYPE_TRANSLATOR["knife"] = "normal"
 PLAYER_HOLDTYPE_TRANSLATOR["duel"] = "normal"
 PLAYER_HOLDTYPE_TRANSLATOR["bugbait"] = "normal"
@@ -45,7 +45,12 @@ function GM:TranslateActivity(client, act)
 	local class = getModelClass(model) or "player"
 	local weapon = client.GetActiveWeapon(client)
 	if (class == "player") then
-		if (!nut.config.get("wepAlwaysRaised") and IsValid(weapon) and !client.isWepRaised(client) and client.OnGround(client)) then
+		if (
+			not nut.config.get("wepAlwaysRaised") and
+			IsValid(weapon) and
+			(client.isWepRaised and not client.isWepRaised(client)) and
+			client:OnGround()
+		) then
 			if (string.find(model, "zombie")) then
 				local tree = nut.anim.zombie
 
@@ -58,18 +63,16 @@ function GM:TranslateActivity(client, act)
 				end
 			end
 
-			local holdType = IsValid(weapon) and (weapon.HoldType or weapon.GetHoldType(weapon)) or "normal"
-
-			if (!nut.config.get("wepAlwaysRaised") and IsValid(weapon) and !client.isWepRaised(client) and client:OnGround()) then
-				holdType = PLAYER_HOLDTYPE_TRANSLATOR[holdType] or "passive"
-			end
+			local holdType = IsValid(weapon)
+				and (weapon.HoldType or weapon.GetHoldType(weapon))
+				or "normal"
+			holdType = PLAYER_HOLDTYPE_TRANSLATOR[holdType] or "passive"
 
 			local tree = nut.anim.player[holdType]
 
 			if (tree and tree[act]) then
 				if (type(tree[act]) == "string") then
-					client.CalcSeqOverride = client.LookupSequence(client, tree[act])
-
+					client.CalcSeqOverride = client.LookupSequence(tree[act])
 					return
 				else
 					return tree[act]
@@ -92,7 +95,6 @@ function GM:TranslateActivity(client, act)
 			if (tree.vehicle and tree.vehicle[class]) then
 				local act = tree.vehicle[class][1]
 				local fixvec = tree.vehicle[class][2]
-				--local fixang = tree.vehicle[class][3]
 
 				if (fixvec) then
 					client:SetLocalPos(Vector(16.5438, -0.1642, -20.5493))
@@ -123,7 +125,10 @@ function GM:TranslateActivity(client, act)
 			end
 
 			if (tree[subClass] and tree[subClass][act]) then
-				local act2 = tree[subClass][act][client.isWepRaised(client) and 2 or 1]
+				local index = (not client.isWepRaised or client:isWepRaised())
+					and 2
+					or 1
+				local act2 = tree[subClass][act][index]
 
 				if (type(act2) == "string") then
 					client.CalcSeqOverride = client.LookupSequence(client, act2)
@@ -139,69 +144,8 @@ function GM:TranslateActivity(client, act)
 	end
 end
 
-function GM:CanPlayerUseBusiness(client, uniqueID)
-	local itemTable = nut.item.list[uniqueID]
-
-	if (!client:getChar()) then
-		return false
-	end
-
-	if (itemTable.noBusiness) then
-		return false
-	end
-	
-	if (itemTable.factions) then
-		local allowed = false
-
-		if (type(itemTable.factions) == "table") then
-			for k, v in pairs(itemTable.factions) do
-				if (client:Team() == v) then
-					allowed = true
-
-					break
-				end
-			end
-		elseif (client:Team() != itemTable.factions) then
-			allowed = false
-		end
-
-		if (!allowed) then
-			return false
-		end
-	end
-
-	if (itemTable.classes) then
-		local allowed = false
-
-		if (type(itemTable.classes) == "table") then
-			for k, v in pairs(itemTable.classes) do
-				if (client:getChar():getClass() == v) then
-					allowed = true
-
-					break
-				end
-			end
-		elseif (client:getChar():getClass() == itemTable.classes) then
-			allowed = true
-		end
-
-		if (!allowed) then
-			return false
-		end
-	end
-
-	if (itemTable.flag) then
-		if (!client:getChar():hasFlags(itemTable.flag)) then
-			return false
-		end
-	end
-
-	return true
-end
-
 function GM:DoAnimationEvent(client, event, data)
-	local model = client:GetModel():lower()
-	local class = nut.anim.getModelClass(model)
+	local class = nut.anim.getModelClass(client:GetModel())
 
 	if (class == "player") then
 		return self.BaseClass:DoAnimationEvent(client, event, data)
@@ -253,33 +197,65 @@ end
 
 local vectorAngle = FindMetaTable("Vector").Angle
 local normalizeAngle = math.NormalizeAngle
+local oldCalcSeqOverride
 
-function GM:CalcMainActivity(client, velocity)
-	local eyeAngles = client.EyeAngles(client)
-	local yaw = vectorAngle(velocity)[2]
-	local normalized = normalizeAngle(yaw - eyeAngles[2])
+function GM:HandlePlayerLanding(client, velocity, wasOnGround)
+	if (client:GetMoveType() == MOVETYPE_NOCLIP) then return end
 
-	client.SetPoseParameter(client, "move_yaw", normalized)
-	
-	local oldSeqOverride = client.CalcSeqOverride
-	local seqIdeal, seqOverride = self.BaseClass.CalcMainActivity(self.BaseClass, client, velocity)
-	--client.CalcSeqOverride is being -1 after this line.
+	if (client:IsOnGround() and not wasOnGround) then
+		local length = (client.lastVelocity or velocity):LengthSqr()
+		local animClass = nut.anim.getModelClass(client:GetModel())
+		if (animClass ~= "player" and length < 100000) then return end
 
-	return seqIdeal, client.nutForceSeq or oldSeqOverride or client.CalcSeqOverride
+		client:AnimRestartGesture(GESTURE_SLOT_JUMP, ACT_LAND, true)
+		return true
+	end
 end
 
-local KEY_BLACKLIST = IN_ATTACK + IN_ATTACK2
+function GM:CalcMainActivity(client, velocity)
+	client.CalcIdeal = ACT_MP_STAND_IDLE
+	
+	oldCalcSeqOverride = client.CalcSeqOverride
+	client.CalcSeqOverride = -1
 
-function GM:StartCommand(client, command)
-	local weapon = client:GetActiveWeapon()
+	local animClass = nut.anim.getModelClass(client:GetModel())
 
-	if (!client:isWepRaised()) then
-		if (IsValid(weapon) and weapon.FireWhenLowered) then
-			return
-		end
+	if (animClass ~= "player") then
+		local eyeAngles = client.EyeAngles(client)
+		local yaw = vectorAngle(velocity)[2]
+		local normalized = normalizeAngle(yaw - eyeAngles[2])
 
-		command:RemoveKey(KEY_BLACKLIST)
+		client.SetPoseParameter(client, "move_yaw", normalized)
 	end
+
+	if (
+		self:HandlePlayerLanding(client, velocity, client.m_bWasOnGround) or
+		self:HandlePlayerNoClipping(client, velocity) or
+		self:HandlePlayerDriving(client) or
+		self:HandlePlayerVaulting(client, velocity) or
+		(usingPlayerAnims and self:HandlePlayerJumping(client, velocity)) or
+		self:HandlePlayerSwimming(client, velocity) or
+		self:HandlePlayerDucking(client, velocity)
+	) then
+	else
+		local len2D = velocity:Length2DSqr()
+		if (len2D > 22500) then
+			client.CalcIdeal = ACT_MP_RUN
+		elseif (len2D > 0.25) then
+			client.CalcIdeal = ACT_MP_WALK
+		end
+	end
+
+	client.m_bWasOnGround = client:IsOnGround()
+	client.m_bWasNoclipping = client:GetMoveType() == MOVETYPE_NOCLIP
+		and not client:InVehicle()
+	client.lastVelocity = velocity
+
+	if (CLIENT) then
+		client:SetIK(false)
+	end
+
+	return client.CalcIdeal, client.nutForceSeq or oldCalcSeqOverride
 end
 
 function GM:OnCharVarChanged(char, varName, oldVar, newVar)
@@ -288,14 +264,6 @@ function GM:OnCharVarChanged(char, varName, oldVar, newVar)
 			v(char, oldVar, newVar)
 		end
 	end
-end
-
-function GM:CanPlayerThrowPunch(client)
-	if (!client:isWepRaised()) then
-		return false
-	end
-
-	return true
 end
 
 function GM:GetDefaultCharName(client, faction)
@@ -316,6 +284,34 @@ function GM:CanPlayerUseChar(client, char)
 
 		return false, "@charBanned"
 	end
+
+	local faction = nut.faction.indices[char:getFaction()]
+	if (
+		faction and
+		hook.Run("CheckFactionLimitReached", faction, char, client)
+	) then
+		return false, "@limitFaction"
+	end
+end
+
+-- Whether or not more players are not allowed to load a character of
+-- a specific faction since the faction is full.
+function GM:CheckFactionLimitReached(faction, character, client)
+	if (isfunction(faction.onCheckLimitReached)) then
+		return faction:onCheckLimitReached(character, client)
+	end
+
+	if (not isnumber(faction.limit)) then return false end
+
+	-- By default, the limit is the number of players allowed in that faction.
+	local maxPlayers = faction.limit
+	
+	-- If some number less than 1, treat it as a percentage of the player count.
+	if (faction.limit < 1) then
+		maxPlayers = math.Round(#player.GetAll() * faction.limit)
+	end
+
+	return team.NumPlayers(faction.index) >= maxPlayers
 end
 
 function GM:CanProperty(client, property, entity)
@@ -341,35 +337,6 @@ function GM:PhysgunPickup(client, entity)
 
 	if (self.BaseClass:PhysgunPickup(client, entity) == false) then
 		return false
-	end
-
-	return false
-end
-
-local TOOL_SAFE = {}
-TOOL_SAFE["lamp"] = true
-TOOL_SAFE["camera"] = true
-
-local TOOL_DANGEROUS = {}
-TOOL_DANGEROUS["dynamite"] = true
-
-function GM:CanTool(client, trace, tool)
-	if (client:IsAdmin()) then
-		return true
-	end
-
-	if (TOOL_DANGEROUS[tool]) then
-		return false
-	end
-	
-	local entity = trace.Entity
-
-	if (IsValid(entity)) then
-		if (TOOL_SAFE[tool]) then
-			return true
-		end
-	else
-		return true
 	end
 
 	return false
@@ -408,31 +375,9 @@ function GM:Move(client, moveData)
 end
 
 function GM:CanItemBeTransfered(itemObject, curInv, inventory)
-	if (itemObject and itemObject.invType) then
-		if (inventory.id != 0 and curInv.id != inventory.id) then
-			if (inventory.vars and inventory.vars.invType) then
-				return false 
-			end
-		end
-
-		local inventory = nut.item.inventories[itemObject:getData("id")]
-
-		if (inventory) then
-			for k, v in pairs(inventory:getItems()) do
-				if (v:getData("equip") == true) then
-					local owner = itemObject:getOwner()
-					
-					if (owner and IsValid(owner)) then
-						if (SERVER) then
-							owner:notifyLocalized("equippedBag")
-						end
-					end
-
-					return false
-				end
-			end
-		end
+	if (itemObject.onCanBeTransfered) then
+		local itemHook = itemObject:onCanBeTransfered(curInv, inventory)
+		
+		return (itemHook != false)
 	end
 end
-
-function GM:ShowHelp() end

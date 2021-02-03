@@ -6,13 +6,11 @@ PLUGIN.desc = "You can modfiy the logging text/lists on this plugin."
 if (SERVER) then
 	local L, type, IsValid = Format, type, IsValid
 	
-	nut.log.addType("playerHurt", function(client, ...)
-		local data = {...}
-		local attacker = data[1] or "unknown"
-		local damage = data[2] or 0
-		local remainingHealth = data[3] or 0
-
-		return string.format("%s has taken %d damage from %s, leaving them at %d health.", client:Name(), damage, attacker, remaingingHealth)
+	nut.log.addType("playerHurt", function(client, attacker, damage, health)
+		attacker = tostring(attacker)
+		damage = damage or 0
+		health = health or 0
+		return string.format("%s has taken %d damage from %s, leaving them at %d health.", client:Name(), damage, attacker, health)
 	end)
 
 	nut.log.addType("playerDeath", function(client, ...)
@@ -24,7 +22,7 @@ if (SERVER) then
 
 	nut.log.addType("playerConnected", function(client, ...)
 		local data = {...}
-		local steamID = data[1]
+		local steamID = data[2]
 
 		return string.format("%s[%s] has connected to the server.", client:Name(), steamID or client:SteamID())
 	end)
@@ -66,14 +64,19 @@ if (SERVER) then
 		return (L("%s used '%s'", client:Name(), arg[1]))
 	end)
 
+	nut.log.addType("charCreate", function(client, ...)
+		local arg = {...}
+		return (L("%s created the character #%s(%s)", client:steamName(), arg[1]:getID(), arg[1]:getName()))
+	end)
+
 	nut.log.addType("charLoad", function(client, ...)
 		local arg = {...}
-		return (L("%s loaded the character #%s(%s)", client:Name(), arg[1], arg[2]))
+		return (L("%s loaded the character #%s(%s)", client:steamName(), arg[1], arg[2]))
 	end)
 
 	nut.log.addType("charDelete", function(client, ...)
 		local arg = {...}
-		return (L("%s(%s) deleted character (%s)", client:steamName(), client:SteamID(), arg[1]))
+		return (L("%s(%s) deleted character (%s)", IsValid(client) and client:steamName() or "COMMAND", IsValid(client) and client:SteamID() or "", arg[1]))
 	end)
 
 	nut.log.addType("itemUse", function(client, ...)
@@ -108,8 +111,12 @@ if (SERVER) then
 		nut.log.add(client, "charLoad", id, character:getName())
 	end
 
-	function PLUGIN:OnCharDelete(client, id)
+	function PLUGIN:OnCharacterDelete(client, id)
 		nut.log.add(client, "charDelete", id)
+	end
+
+	function PLUGIN:OnCharCreated(client, character)
+		nut.log.add(client, "charCreate", character)
 	end
 	
 	function PLUGIN:OnTakeShipmentItem(client, itemClass, amount)

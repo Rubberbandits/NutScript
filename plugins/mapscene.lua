@@ -13,8 +13,10 @@ if (CLIENT) then
 
 	function PLUGIN:CalcView(client, origin, angles, fov)
 		local scenes = self.scenes
-
-		if (IsValid(nut.gui.char) and table.Count(scenes) > 0) then
+		local shouldShow = IsValid(nut.gui.character)
+			or not IsValid(LocalPlayer())
+			or not LocalPlayer():getChar()
+		if (shouldShow and table.Count(scenes) > 0) then
 			local key = self.index
 			local value = scenes[self.index]
 
@@ -94,7 +96,7 @@ if (CLIENT) then
 	function PLUGIN:CalcViewModelView(weapon, viewModel, oldEyePos, oldEyeAngles, eyePos, eyeAngles)
 		local scenes = self.scenes
 
-		if (IsValid(nut.gui.char)) then
+		if (IsValid(nut.gui.character)) then
 			return HIDE_WEAPON, HIDE_ANGLE
 		end		
 	end

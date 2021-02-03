@@ -1,7 +1,9 @@
 -- Define gamemode information.
-GM.Name = "NutScript 1.1"
+GM.Name = "NutScript 2.0"
 GM.Author = "Chessnut and Black Tea"
 GM.Website = "http://nutscript.net/"
+
+nut.version = "2.0"
 
 -- Fix for client:SteamID64() returning nil when in single-player.
 do
@@ -48,7 +50,6 @@ do
 end
 
 -- Include core framework files.
-nut.util.include("core/cl_skin.lua")
 nut.util.includeDir("core/libs/thirdparty")
 nut.util.include("core/sh_config.lua")
 nut.util.includeDir("core/libs")
@@ -72,27 +73,15 @@ NUT_PLUGINS_ALREADY_LOADED = false
 function GM:OnReloaded()
 	-- Reload the default fonts.
 	if (CLIENT) then
-		hook.Run("LoadFonts", nut.config.get("font"), nut.config.get("genericFont"))
-
-		-- Reload the scoreboard.
-		if (IsValid(nut.gui.score)) then
-			nut.gui.score:Remove()
-		end
+		hook.Run(
+			"LoadNutFonts",
+			nut.config.get("font"),
+			nut.config.get("genericFont")
+		)
 	else
 		-- Auto-reload support for faction pay timers.
-		for index, faction in ipairs(nut.faction.indices) do
-			for k, v in ipairs(team.GetPlayers(index)) do
-				if (faction.pay and faction.pay > 0) then
-					timer.Adjust("nutSalary"..v:UniqueID(), faction.payTime or 300, 0, function()
-						local pay = hook.Run("GetSalaryAmount", v, faction) or faction.pay
-
-						v:getChar():giveMoney(pay)
-						v:notifyLocalized("salary", nut.currency.get(pay))
-					end)
-				else
-					timer.Remove("nutSalary"..v:UniqueID())
-				end
-			end
+		for _, client in ipairs(player.GetAll()) do
+			hook.Run("CreateSalaryTimer", client)
 		end
 	end
 

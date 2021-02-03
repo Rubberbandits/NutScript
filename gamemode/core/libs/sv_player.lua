@@ -13,8 +13,8 @@ do
 					_lastJoin = timeStamp,
 				}, nil, "players", "_steamID = "..steamID64)
 
-				self.firstJoin = data[1]._firstJoin
-				self.lastJoin = data[1]._lastJoin
+				self.firstJoin = data[1]._firstJoin or timeStamp
+				self.lastJoin = data[1]._lastJoin or timeStamp
 				 
 				self.nutData = util.JSONToTable(data[1]._data)
 
@@ -38,7 +38,7 @@ do
 	end
 
 	function playerMeta:saveNutData()
-		local name = self:Name()
+		local name = self:steamName()
 		local steamID64 = self:SteamID64()
 		local timeStamp = os.date("%Y-%m-%d %H:%M:%S", os.time())
 

@@ -2,6 +2,7 @@ nut.config = nut.config or {}
 nut.config.stored = nut.config.stored or {}
 
 function nut.config.add(key, value, desc, callback, data, noNetworking, schemaOnly)
+	assert(isstring(key), "expected config key to be string, got "..type(key))
 	local oldConfig = nut.config.stored[key]
 
 	nut.config.stored[key] = {data = data, value = oldConfig and oldConfig.value or value, default = value, desc = desc, noNetworking = noNetworking, global = !schemaOnly, callback = callback}
@@ -53,6 +54,9 @@ function nut.config.get(key, default)
 
 	if (config) then
 		if (config.value != nil) then
+			if type(config.value) == "table" and config.value.r and config.value.g and config.value.b then -- if the value is a table with rgb values
+				config.value = Color(config.value.r, config.value.g, config.value.b) -- convert it to a Color table
+			end
 			return config.value
 		elseif (config.default != nil) then
 			return config.default
@@ -133,7 +137,6 @@ if (SERVER) then
 					value2 = value2..v..(i == count and "]" or ", ")
 					i = i + 1
 				end
-
 				value = value2
 			end
 
@@ -184,7 +187,9 @@ if (CLIENT) then
 			tabs["config"] = function(panel)
 				local scroll = panel:Add("DScrollPanel")
 				scroll:Dock(FILL)
-				
+
+				hook.Run("CreateConfigPanel", panel)
+
 				local properties = scroll:Add("DProperties")
 				properties:SetSize(panel:GetSize())
 
@@ -220,7 +225,7 @@ if (CLIENT) then
 								value = tonumber(nut.config.get(k)) or value
 							elseif (formType == "boolean") then
 								form = "Boolean"
-								value = util.tobool(nut.config.get(k))
+								value = tobool(nut.config.get(k))
 							else
 								form = "Generic"
 								value = nut.config.get(k) or value
@@ -241,10 +246,10 @@ if (CLIENT) then
 						end
 
 						-- Add a new row for the config to the properties.
-						local row = properties:CreateRow(category, k)
+						local row = properties:CreateRow(category, tostring(k))
 						row:Setup(form, v.data and v.data.data or {})
 						row:SetValue(value)
-						row:SetToolTip(v.desc)
+						row:SetTooltip(v.desc)
 						row.DataChanged = function(this, value)
 							timer.Create("nutCfgSend"..k, delay, 1, function()
 								if (IsValid(row)) then
@@ -259,7 +264,7 @@ if (CLIENT) then
 											value = math.Round(value)
 										end
 									elseif (form == "Boolean") then
-										value = util.tobool(value)
+										value = tobool(value)
 									end
 
 									netstream.Start("cfgSet", k, value)

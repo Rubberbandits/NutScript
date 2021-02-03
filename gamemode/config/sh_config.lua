@@ -18,22 +18,17 @@ nut.config.add("maxChars", 5, "The maximum number of characters a player can hav
 
 nut.config.add("color", Color(75, 119, 190), "The main color theme for the framework.", nil, {category = "appearance"})
 
-nut.config.add("font", "Impact", "The font used to display titles.", function(oldValue, newValue)
+nut.config.add("font", "Arial", "The font used to display titles.", function(oldValue, newValue)
 	if (CLIENT) then
-		hook.Run("LoadFonts", newValue, nut.config.get("genericFont"))
+		hook.Run("LoadNutFonts", newValue, nut.config.get("genericFont"))
 	end
 end, {category = "appearance"})
 
 nut.config.add("genericFont", "Segoe UI", "The font used to display generic texts.", function(oldValue, newValue)
 	if (CLIENT) then
-		hook.Run("LoadFonts", nut.config.get("font"), newValue)
+		hook.Run("LoadNutFonts", nut.config.get("font"), newValue)
 	end
 end, {category = "appearance"})
-
-nut.config.add("maxAttribs", 30, "The total maximum amount of attribute points allowed.", nil, {
-	data = {min = 1, max = 250},
-	category = "characters"
-})
 
 nut.config.add("chatRange", 280, "The maximum distance a person's IC chat message goes to.", nil, {
 	form = "Float",
@@ -112,25 +107,6 @@ nut.config.add("punchStamina", 10, "How much stamina punches use up.", nil, {
 	data = {min = 0, max = 100},
 	category = "characters"
 })
-nut.config.add("music", "music/hl2_song2.mp3", "The default music played in the character menu.", nil, {
-	category = "appearance"
-})
-
-nut.config.add("logo", "https://static.miraheze.org/nutscriptwiki/2/26/Nutscript.png", "The icon shown on the character menu. Max size is 86x86.", nil, {
-	category = "appearance"
-})
-
-nut.config.add("logoURL", "http://nutscript.net/", "The URL opened when the icon is clicked.", nil, {
-	category = "appearance"
-})
-
-nut.config.add("vignette", true, "Whether or not the vignette is shown.", nil, {
-	category = "appearance"
-})
-
-nut.config.add("sbRecog", false, "Whether or not recognition is used in the scoreboard.", nil, {
-	category = "characters"
-})
 
 nut.config.add("defMoney", 0, "The amount of money that players start with.", nil, {
 	category = "characters",
@@ -149,41 +125,28 @@ end, {
 	data = {min = 0, max = 5000}
 })
 
-nut.config.add("sbWidth", 0.325, "Scoreboard's width within percent of screen width.", function(oldValue, newValue)
-	if (CLIENT and IsValid(nut.gui.score)) then
-		nut.gui.score:Remove()
-	end
-end, {
-	form = "Float",
-	category = "visual",
-	data = {min = 0.2, max = 1}
-})
-
-nut.config.add("sbHeight", 0.825, "Scoreboard's height within percent of screen height.", function(oldValue, newValue)
-	if (CLIENT and IsValid(nut.gui.score)) then
-		nut.gui.score:Remove()
-	end
-end, {
-	form = "Float",
-	category = "visual",
-	data = {min = 0.3, max = 1}
-})
-
-nut.config.add("sbTitle", GetHostName(), "The title of the scoreboard.", function(oldValue, newValue)
-	if (CLIENT and IsValid(nut.gui.score)) then
-		nut.gui.score:Remove()
-	end
-end, {
-	category = "visual"
-})
-
-nut.config.add("wepAlwaysRaised", false, "Whether or not weapons are always raised.", nil, {
-	category = "server"
-})
-
 nut.config.add("contentURL", "http://nutscript.net/", "Your server's collection pack.", nil, {
 	category = "server"
 })
+
+nut.config.add(
+	"moneyModel",
+	"models/props_lab/box01a.mdl",
+	"The model for money entities.",
+	nil,
+	{category = "server"}
+)
+
+nut.config.add(
+	"salaryInterval",
+	300,
+	"How often a player gets paid in seconds.",
+	nil,
+	{
+		data = {min = 1, max = 3600},
+		category = "characters"
+	}
+)
 
 local dist = nut.config.get("voiceDistance")
 nut.config.squaredVoiceDistance = dist * dist

@@ -18,7 +18,8 @@ if (CLIENT) then
 	end
 end
 
--- On item is dropped, Remove a weapon from the player and keep the ammo in the item.
+-- On item is dropped, Remove a weapon from the player and keep the ammo in
+-- the item.
 ITEM:hook("drop", function(item)
 	if (item:getData("equip")) then
 		item:setData("equip", nil)
@@ -32,12 +33,13 @@ ITEM:hook("drop", function(item)
 
 			item.player:StripWeapon(item.class)
 			item.player.carryWeapons[item.weaponCategory] = nil
-			item.player:EmitSound("items/ammo_pickup.wav", 80)
+			item.player:EmitSound(item.unequipSound or "items/ammo_pickup.wav", 80)
 		end
 	end
 end)
 
--- On player uneqipped the item, Removes a weapon from the player and keep the ammo in the item.
+-- On player uneqipped the item, Removes a weapon from the player and keep
+-- the ammo in the item.
 ITEM.functions.EquipUn = { -- sorry, for name order.
 	name = "Unequip",
 	tip = "equipTip",
@@ -59,7 +61,7 @@ ITEM.functions.EquipUn = { -- sorry, for name order.
 			print(Format("[Nutscript] Weapon %s does not exist!", item.class))
 		end
 
-		item.player:EmitSound("items/ammo_pickup.wav", 80)
+		item.player:EmitSound(item.unequipSound or "items/ammo_pickup.wav", 80)
 		item.player.carryWeapons[item.weaponCategory] = nil
 
 		item:setData("equip", nil)
@@ -75,7 +77,8 @@ ITEM.functions.EquipUn = { -- sorry, for name order.
 	end
 }
 
--- On player eqipped the item, Gives a weapon to player and load the ammo data from the item.
+-- On player eqipped the item, Gives a weapon to player and load the ammo data
+-- from the item.
 ITEM.functions.Equip = {
 	name = "Equip",
 	tip = "equipTip",
@@ -88,18 +91,13 @@ ITEM.functions.Equip = {
 
 		for k, v in pairs(items) do
 			if (v.id != item.id) then
-				local itemTable = nut.item.instances[v.id]
-				
-				if (!itemTable) then
-					client:notifyLocalized("tellAdmin", "wid!xt")
-
+				if (
+					v.isWeapon and
+					client.carryWeapons[item.weaponCategory] and
+					v:getData("equip")
+			 	) then
+					client:notifyLocalized("weaponSlotFilled")
 					return false
-				else
-					if (itemTable.isWeapon and client.carryWeapons[item.weaponCategory] and itemTable:getData("equip")) then
-						client:notifyLocalized("weaponSlotFilled")
-
-						return false
-					end
 				end
 			end
 		end
@@ -113,13 +111,16 @@ ITEM.functions.Equip = {
 		if (IsValid(weapon)) then
 			timer.Simple(0, function()
 				client:SelectWeapon(weapon:GetClass())
-				--client:SetActiveWeapon(weapon)
 			end)
 			client.carryWeapons[item.weaponCategory] = weapon
-			client:EmitSound("items/ammo_pickup.wav", 80)
+			client:EmitSound(item.equipSound or "items/ammo_pickup.wav", 80)
 
 			-- Remove default given ammo.
-			if (client:GetAmmoCount(weapon:GetPrimaryAmmoType()) == weapon:Clip1() and item:getData("ammo", 0) == 0) then
+			local ammoCount =  client:GetAmmoCount(weapon:GetPrimaryAmmoType())
+			if (
+				ammoCount == weapon:Clip1() and
+				item:getData("ammo", 0) == 0
+			) then
 				client:RemoveAmmo(weapon:Clip1(), weapon:GetPrimaryAmmoType())
 			end
 			item:setData("equip", true)
@@ -174,7 +175,7 @@ function ITEM:onSave()
 	end
 end
 
-HOLSTER_DRAWINFO = {}
+HOLSTER_DRAWINFO = HOLSTER_DRAWINFO or {}
 
 -- Called after the item is registered into the item tables.
 function ITEM:onRegistered()
@@ -186,7 +187,9 @@ end
 hook.Add("PlayerDeath", "nutStripClip", function(client)
 	client.carryWeapons = {}
 
-	for k, v in pairs(client:getChar():getInv():getItems()) do
+	local inventory = client:getChar() and client:getChar():getInv()
+	if (not inventory) then return end
+	for k, v in pairs(inventory:getItems()) do
 		if (v.isWeapon and v:getData("equip")) then
 			v:setData("ammo", nil)
 		end
@@ -195,13 +198,15 @@ end)
 
 function ITEM:onRemoved()
 	local inv = nut.item.inventories[self.invID]
-	local receiver = inv.getReceiver and inv:getReceiver()
+	if (inv) then
+		local receiver = inv.getReceiver and inv:getReceiver()
 
-	if (IsValid(receiver) and receiver:IsPlayer()) then
-        local weapon = receiver:GetWeapon(self.class)
+		if (IsValid(receiver) and receiver:IsPlayer()) then
+			local weapon = receiver:GetWeapon(self.class)
 
-        if (IsValid(weapon)) then
-            weapon:Remove()
-        end
+			if (IsValid(weapon)) then
+				weapon:Remove()
+			end
+		end
 	end
 end
