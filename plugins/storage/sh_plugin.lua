@@ -28,8 +28,19 @@ if (CLIENT) then
 	end
 end
 
+local canLockStorage = {
+	founder = true,
+    communitymanager = true,
+    superadministrator = true,
+    senioradministrator = true,
+    administrator = true,
+    moderator = true,
+}
+
 nut.command.add("storagelock", {
-	adminOnly = true,
+	onCheckAccess = function(client)
+		return canLockStorage[client:GetUserGroup()]
+	end,
 	syntax = "[string password]",
 	onRun = function(client, arguments)
 		local trace = client:GetEyeTraceNoCursor()

@@ -1,4 +1,4 @@
-NS_ICON_SIZE = 64
+NS_ICON_SIZE = 48
 
 -- The queue for the rendered icons.
 renderedIcons = renderedIcons or {}

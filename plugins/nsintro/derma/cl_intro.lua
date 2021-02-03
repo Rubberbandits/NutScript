@@ -1,5 +1,6 @@
 local gradient = nut.util.getMaterial("vgui/gradient-r.vtf")
 local glow = surface.GetTextureID("particle/Particle_Glow_04_Additive")
+local mathApproach = math.Approach
 
 local PANEL = {}
 	function PANEL:Init()
@@ -135,7 +136,7 @@ local PANEL = {}
 		surface.DrawRect(0, 0, w, h)
 
 		if (self.glow) then
-			self.delta = math.Approach(self.delta, 100, FrameTime() * 10)
+			self.delta = mathApproach(self.delta, 100, FrameTime() * 10)
 
 			local x, y = ScrW()*0.5 - 700, ScrH()*0.5 - 340
 

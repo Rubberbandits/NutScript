@@ -42,6 +42,7 @@ end
 
 -- Gradient for subtle effects.
 local gradient = Material("vgui/gradient-u")
+local mathApproach = math.Approach
 
 -- A function to draw all of the active menus or hide them when needed.
 function nut.menu.drawAll()
@@ -86,7 +87,7 @@ function nut.menu.drawAll()
 
 		-- Make the menu more visible if the center is inside the menu or it hasn't peaked in alpha yet.
 		if (!v.displayed or inside) then
-			v.alpha = math.Approach(alpha or 0, 255, frameTime * 25)
+			v.alpha = mathApproach(alpha or 0, 255, frameTime * 25)
 
 			-- If this is the first time we reach full alpha, store it.
 			if (v.alpha == 255) then
@@ -94,7 +95,7 @@ function nut.menu.drawAll()
 			end
 		-- Otherwise the menu should fade away.
 		else
-			v.alpha = math.Approach(alpha or 0, 0, inRange and frameTime or (frameTime * 45))
+			v.alpha = mathApproach(alpha or 0, 0, inRange and frameTime or (frameTime * 45))
 
 			-- If it has completely faded away, remove it.
 			if (v.alpha == 0) then

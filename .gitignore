@@ -23,3 +23,7 @@ plugins/area/sh_plugin.lua
 plugins/area/derma/cl_areamanager.lua
 plugins/area/entities/weapons/nut_areahelper.lua
 plugins/area/languages/sh_english.lua
+plugins/area/sh_plugin.lua
+plugins/area/derma/cl_areamanager.lua
+plugins/area/entities/weapons/nut_areahelper.lua
+plugins/area/languages/sh_english.lua

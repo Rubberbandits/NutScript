@@ -5,6 +5,9 @@ PLUGIN.acts = PLUGIN.acts or {}
 
 nut.util.include("sh_setup.lua")
 
+local Entity_Meta = FindMetaTable("Entity")
+local Player_GetNetVar = Entity_Meta.getNetVar
+
 for k, v in pairs(PLUGIN.acts) do
 	local data = {}
 		local multiple = false
@@ -24,6 +27,7 @@ for k, v in pairs(PLUGIN.acts) do
 		data.onRun = function(client, arguments)
 			if (client.nutSeqUntimed) then
 				client:setNetVar("actAng")
+				client:Freeze(false)
 				client:leaveSequence()
 				client.nutSeqUntimed = nil
 
@@ -63,6 +67,7 @@ for k, v in pairs(PLUGIN.acts) do
 					client.nutSeqUntimed = info.untimed
 					client.nutNextAct = CurTime() + (info.untimed and 4 or duration) + 1
 					client:setNetVar("actAng", client:GetAngles())
+					client:Freeze(true)
 				else
 					return "@modelNoSeq"
 				end
@@ -81,11 +86,13 @@ end
 
 function PLUGIN:OnPlayerLeaveSequence(client)
 	client:setNetVar("actAng")
+	client:Freeze(false)
 end
 
 function PLUGIN:PlayerDeath(client)
 	if (client.nutSeqUntimed) then
 		client:setNetVar("actAng")
+		client:Freeze(false)
 		client:leaveSequence()
 		client.nutSeqUntimed = nil
 	end
@@ -94,6 +101,7 @@ end
 function PLUGIN:OnCharFallover(client)
 	if (client.nutSeqUntimed) then
 		client:setNetVar("actAng")
+		client:Freeze(false)
 		client:leaveSequence()
 		client.nutSeqUntimed = nil
 	end
@@ -109,7 +117,7 @@ local GROUND_PADDING = Vector(0, 0, 8)
 local PLAYER_OFFSET = Vector(0, 0, 72)
 
 function PLUGIN:CalcView(client, origin, angles, fov)
-	if (client:getNetVar("actAng")) then
+	if (Player_GetNetVar(client, "actAng")) then
 		local view = {}
 			local data = {}
 				data.start = client:GetPos() + PLAYER_OFFSET
@@ -121,7 +129,7 @@ function PLUGIN:CalcView(client, origin, angles, fov)
 end
 
 function PLUGIN:PlayerBindPress(client, bind, pressed)
-	if (client:getNetVar("actAng")) then
+	if (Player_GetNetVar(client, "actAng")) then
 		bind = bind:lower()
 
 		if (bind:find("+jump") and pressed) then

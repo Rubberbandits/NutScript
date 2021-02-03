@@ -36,6 +36,11 @@ end
 -- A user is allowed to use PAC if they have the flag or is in an allowed group.
 function PLUGIN:isAllowedToUsePAC(client)
 	local flag = nut.config.get("pacFlag", "")
+
+	if flag == "" then
+		return true
+	end
+
 	if (
 		client:getChar() and
 		flag ~= "" and

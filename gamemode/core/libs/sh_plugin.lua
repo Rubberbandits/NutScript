@@ -154,6 +154,7 @@ function nut.plugin.loadEntities(path)
 						register(_G[variable], v)
 					end
 				end
+				
 			_G[variable] = nil
 		end
 

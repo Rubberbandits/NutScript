@@ -63,6 +63,20 @@ function PLUGIN:migrateStorageSize(res)
 	end
 end
 
+function PLUGIN:migrateInventorySize(res)
+	local w, h = nut.config.get("invW", 10), nut.config.get("invH", 4)
+	if (isnumber(w) and isnumber(h)) then
+		local addW = self:addInventoryData(res, "w", w)
+		local addH = self:addInventoryData(res, "h", h)
+		return deferred.all({addW, addH}):next(function()
+			self:print(
+				"\tMigrated player inventory "..res._invID.." with"..
+				" (w,h) = ("..tostring(w)..","..tostring(h)..")"
+			)
+		end)
+	end
+end
+
 function PLUGIN:deleteCharID(res)
 	-- TODO: add promise support for nut.db.*Table
 	local d = deferred.new()
@@ -107,22 +121,12 @@ function PLUGIN:migrateBagSize(res)
 		end)
 end
 
-function PLUGIN:migrateInventorySize(res)
-	local w, h = nut.config.get("invW"), nut.config.get("invH")
-	if (isnumber(w) and isnumber(h)) then
-		local addW = self:addInventoryData(res, "w", w)
-		local addH = self:addInventoryData(res, "h", h)
-		return deferred.all({addW, addH}):next(function()
-			self:print(
-				"\tMigrated player inventory "..res._invID.." with"..
-				" (w,h) = ("..tostring(w)..","..tostring(h)..")"
-			)
-		end)
-	end
-end
-
 function PLUGIN:migrateSize(res)
-	return (res._charID ~= 0 and self:migrateInventorySize(res)) or self:migrateStorageSize(res) or self:migrateBagSize(res)
+	if res._charID ~= 0 then
+		return self:migrateInventorySize(res)
+	end
+
+	return self:migrateStorageSize(res) or self:migrateBagSize(res)
 end
 
 function PLUGIN:migrateInvType(res)
