@@ -106,7 +106,7 @@ function GM:TranslateActivity(client, act)
 		if (
 			not configGet("wepAlwaysRaised") and
 			IsValid(weapon) and
-			(Player_IsWepRaised and not Player_IsWepRaised(client)) and
+			(client.isWepRaised and not Player_IsWepRaised(client)) and
 			Player_OnGround(client)
 		) then
 			if (stringFind(model, "zombie")) then
@@ -183,7 +183,7 @@ function GM:TranslateActivity(client, act)
 			end
 
 			if (tree[subClass] and tree[subClass][act]) then
-				local index = (not Player_IsWepRaised or Player_IsWepRaised(client))
+				local index = (not client.isWepRaised or Player_IsWepRaised(client))
 					and 2
 					or 1
 				local act2 = tree[subClass][act][index]
