@@ -5,6 +5,8 @@
 nut.item.inventories = nut.inventory.instances
 
 local function DEPRECATED()
+	if !SHOW_DEPRECATED_WARNINGS then return end
+
 	local warning = debug.getinfo(2, "n").name.." is deprecated"
 	local output = debug.traceback(warning, 3)
 	local lines = string.Explode("\n", output)

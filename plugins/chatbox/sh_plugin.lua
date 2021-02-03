@@ -28,11 +28,13 @@ if (CLIENT) then
 		end
 	end
 
-	function PLUGIN:HUDShouldDraw(element)
-		if (element == "CHudChat") then
+	local toHide = {CHudChat = true}
+
+	hook.Add("HUDShouldDraw", "ChatboxHideChat", function(element)
+		if toHide[element] then
 			return false
 		end
-	end
+	end)
 
 	chat.nutAddText = chat.nutAddText or chat.AddText
 

@@ -1,6 +1,7 @@
 local PANEL = {}
 	local gradient = nut.util.getMaterial("vgui/gradient-u")
 	local gradient2 = nut.util.getMaterial("vgui/gradient-d")
+	local mathApproach = math.Approach
 
 	function PANEL:Init()
 		self:SetTall(20)
@@ -94,7 +95,7 @@ local PANEL = {}
 			end
 		end
 
-		self.deltaValue = math.Approach(self.deltaValue, self.value, FrameTime() * 15)
+		self.deltaValue = mathApproach(self.deltaValue, self.value, FrameTime() * 15)
 	end
 
 	function PANEL:doChange()

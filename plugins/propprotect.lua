@@ -99,6 +99,7 @@ if (SERVER) then
 
 	function PLUGIN:PlayerSpawnedEntity(client, entity)
 		entity:SetCreator(client)
+		entity:SetNW2Entity("Creator", client)
 	end
 
 	function PLUGIN:PlayerSpawnedProp(client, model, entity)

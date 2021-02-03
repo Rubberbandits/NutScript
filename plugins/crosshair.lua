@@ -173,8 +173,12 @@ function PLUGIN:GetCrosshairIcon(curAlpha, entity, weapon, distance)
 	end
 end
 
-function PLUGIN:HUDShouldDraw(element)
-	if (element == "CHudCrosshair") then
+local prevent = {
+	CHudCrosshair = true
+}
+
+hook.Add("HUDShouldDraw", "preventCrosshair", function(element)
+	if prevent[element] then
 		return false
 	end
-end
+end)
