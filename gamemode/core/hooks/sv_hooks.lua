@@ -451,6 +451,12 @@ function GM:PlayerDisconnected(client)
 		character:save()
 	end
 
+	if (IsValid(client.nutRagdoll)) then
+		client.nutRagdoll.nutNoReset = true
+		client.nutRagdoll.nutIgnoreDelete = true
+		client.nutRagdoll:Remove()
+	end
+	
 	nut.char.cleanUpForPlayer(client)
 end
 
