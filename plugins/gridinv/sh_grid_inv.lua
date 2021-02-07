@@ -150,6 +150,7 @@ if (SERVER) then
 			if (fullUpdate) then
 				for _, client in ipairs(player.GetAll()) do
 					if !IsValid(client) then return end
+					if !client:getChar() then return end
 
 					if (client:getChar():getID() == owner) then
 						self:sync(client)
