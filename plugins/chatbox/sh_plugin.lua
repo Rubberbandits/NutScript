@@ -47,8 +47,19 @@ if (CLIENT) then
 			show = PLUGIN.panel:addText(...)
 		end
 
+		-- i dont like this too much but recreating all of chat.AddText is lame too
+
 		if (show) then
-			chat.nutAddText(...)
+			local data = {...}
+			
+			for _,arg in ipairs(data) do
+				if type(arg) == "Player" then
+					data[_] = team.GetColor(arg:Team())
+					table.insert(data, _ + 1, arg:Name())
+				end
+			end
+
+			chat.nutAddText(unpack(data))
 		end
 	end
 
