@@ -37,4 +37,17 @@ if (CLIENT) then
 		end
 		return stacks
 	end
+
+	local PADDING = 2
+
+	-- this is one ghetto as hell hack ngl
+	function PLUGIN:OnRequestItemTransfer(panel, itemID, invID, x, y)
+		local item = nut.item.instances[itemID]
+		local itemPanel = panel.icons[itemID]
+		if item and itemPanel and item.invID == invID then
+			local size = itemPanel.size + PADDING
+
+			itemPanel:SetPos((x - 1) * size, (y - 1) * size)
+		end
+	end
 end
