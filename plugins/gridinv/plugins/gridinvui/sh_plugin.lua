@@ -44,7 +44,7 @@ if (CLIENT) then
 	function PLUGIN:OnRequestItemTransfer(panel, itemID, invID, x, y)
 		local item = nut.item.instances[itemID]
 		local itemPanel = panel.icons[itemID]
-		if item and itemPanel and item.invID == invID then
+		if item and itemPanel and item.invID == invID and !panel.occupied[y - 1][x - 1] then
 			local size = itemPanel.size + PADDING
 
 			itemPanel:SetPos((x - 1) * size, (y - 1) * size)
