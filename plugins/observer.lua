@@ -18,6 +18,7 @@ if (CLIENT) then
 
 			for k, v in ipairs(player.GetAll()) do
 				if (v == client) then continue end
+				if v:IsDormant() then continue end
 
 				scrPos = v:GetPos():ToScreen()
 				marginx, marginy = sy*.1, sy*.1
