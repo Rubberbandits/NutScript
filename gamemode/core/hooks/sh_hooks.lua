@@ -35,85 +35,27 @@ PLAYER_HOLDTYPE_TRANSLATOR["bugbait"] = "normal"
 local getModelClass = nut.anim.getModelClass
 local IsValid = IsValid
 local string = string
-
-local stringFind = string.find
-local stringLower = string.lower
-
 local type = type
-
-/*
-	This file is one of the main offenders for bad performance in the gamemode.
-	As razor says: haunted code
-
-	Turns out, metamethods call __index of the metatable twice. Best to precache.
-
-	Deep table traversal is bad for performance, unfortunately most nutscript functions
-	are on average 3 layers deep.
-
-	Example, any character metamethods are going to traverse 5-6 layers deep into the table.
-*/
-
-local Entity_Meta = FindMetaTable("Entity")
-local Entity_GetClass = Entity_Meta.GetClass
-local Entity_isChair = Entity_Meta.isChair
-local Player_GetNetVar = Entity_Meta.getNetVar
-
-local MoveData_Meta = FindMetaTable("CMoveData")
-local Move_KeyDown = MoveData_Meta.KeyDown
-local Move_SetForwardSpeed = MoveData_Meta.SetForwardSpeed
-local Move_SetSideSpeed = MoveData_Meta.SetSideSpeed
-
-local Player_Meta = FindMetaTable("Player")
-
-local Player_GetModel = Entity_Meta.GetModel
-local Player_GetWalkSpeed = Player_Meta.GetWalkSpeed
-local Player_OnGround = Entity_Meta.OnGround
-local Player_GetActiveWeapon = Player_Meta.GetActiveWeapon
-local Player_IsWepRaised = Player_Meta.isWepRaised
-local Player_SetLocalPos = Entity_Meta.SetLocalPos
-local Player_GetVehicle = Player_Meta.GetVehicle
-local Player_LookupSequence = Entity_Meta.LookupSequence
-local Player_ManipulateBonePosition = Entity_Meta.ManipulateBonePosition
-local Player_AnimRestartGesture = Player_Meta.AnimRestartGesture
-local Player_InVehicle = Player_Meta.InVehicle
-local Player_GetMoveType = Entity_Meta.GetMoveType
-local Player_EyeAngles = Entity_Meta.EyeAngles
-local Player_SetPoseParameter = Entity_Meta.SetPoseParameter
-local Player_SetIK = Entity_Meta.SetIK
-
-local Vector_Meta = FindMetaTable("Vector")
-local Vector_Length2DSqr = Vector_Meta.Length2DSqr
-
-
-local Weapon_Meta = FindMetaTable("Weapon")
-local Weapon_GetHoldType = Weapon_Meta.GetHoldType
-
-local configGet = nut.config.get
-
-local nutAnim = nut.anim
-local nutAnimZombie = nut.anim.zombie
-local nutAnimFastZombie = nut.anim.fastZombie
-local nutAnimPlayer = nut.anim.player
 
 local PLAYER_HOLDTYPE_TRANSLATOR = PLAYER_HOLDTYPE_TRANSLATOR
 local HOLDTYPE_TRANSLATOR = HOLDTYPE_TRANSLATOR
 
 function GM:TranslateActivity(client, act)
-	local model = stringLower(client.GetModel(client))
+	local model = string.lower(client.GetModel(client))
 	local class = getModelClass(model) or "player"
-	local weapon = Player_GetActiveWeapon(client)
+	local weapon = client.GetActiveWeapon(client)
 	if (class == "player") then
 		if (
-			not configGet("wepAlwaysRaised") and
+			not nut.config.get("wepAlwaysRaised") and
 			IsValid(weapon) and
-			(client.isWepRaised and not client:isWepRaised()) and
-			Player_OnGround(client)
+			(client.isWepRaised and not client.isWepRaised(client)) and
+			client:OnGround()
 		) then
-			if (stringFind(model, "zombie")) then
-				local tree = nutAnimZombie
+			if (string.find(model, "zombie")) then
+				local tree = nut.anim.zombie
 
-				if (stringFind(model, "fast")) then
-					tree = nutAnimFastZombie
+				if (string.find(model, "fast")) then
+					tree = nut.anim.fastZombie
 				end
 
 				if (tree[act]) then
@@ -122,15 +64,15 @@ function GM:TranslateActivity(client, act)
 			end
 
 			local holdType = IsValid(weapon)
-				and (weapon.HoldType or Weapon_GetHoldType(weapon))
+				and (weapon.HoldType or weapon.GetHoldType(weapon))
 				or "normal"
 			holdType = PLAYER_HOLDTYPE_TRANSLATOR[holdType] or "passive"
 
-			local tree = nutAnimPlayer[holdType]
+			local tree = nut.anim.player[holdType]
 
 			if (tree and tree[act]) then
 				if (type(tree[act]) == "string") then
-					client.CalcSeqOverride = Player_LookupSequence(client, tree[act])
+					client.CalcSeqOverride = client.LookupSequence(tree[act])
 					return
 				else
 					return tree[act]
@@ -141,25 +83,25 @@ function GM:TranslateActivity(client, act)
 		return self.BaseClass.TranslateActivity(self.BaseClass, client, act)
 	end
 
-	local tree = nutAnim[class]
+	local tree = nut.anim[class]
 
 	if (tree) then
 		local subClass = "normal"
 
-		if (Player_InVehicle(client)) then
-			local vehicle = Player_GetVehicle(client)
-			local class = Entity_isChair(vehicle) and "chair" or Entity_GetClass(vehicle)
+		if (client.InVehicle(client)) then
+			local vehicle = client.GetVehicle(client)
+			local class = vehicle:isChair() and "chair" or vehicle:GetClass()
 
 			if (tree.vehicle and tree.vehicle[class]) then
 				local act = tree.vehicle[class][1]
 				local fixvec = tree.vehicle[class][2]
 
 				if (fixvec) then
-					Player_SetLocalPos(client, Vector(16.5438, -0.1642, -20.5493))
+					client:SetLocalPos(Vector(16.5438, -0.1642, -20.5493))
 				end
 
 				if (type(act) == "string") then
-					client.CalcSeqOverride = Player_LookupSequence(client, act)
+					client.CalcSeqOverride = client.LookupSequence(client, act)
 
 					return
 				else
@@ -169,16 +111,16 @@ function GM:TranslateActivity(client, act)
 				act = tree.normal[ACT_MP_CROUCH_IDLE][1]
 
 				if (type(act) == "string") then
-					client.CalcSeqOverride = Player_LookupSequence(client, act)
+					client.CalcSeqOverride = client:LookupSequence(act)
 				end
 
 				return
 			end
-		elseif (Player_OnGround(client)) then
-			Player_ManipulateBonePosition(client, 0, vector_origin)
+		elseif (client.OnGround(client)) then
+			client.ManipulateBonePosition(client, 0, vector_origin)
 
 			if (IsValid(weapon)) then
-				subClass = weapon.HoldType or Weapon_GetHoldType(weapon)
+				subClass = weapon.HoldType or weapon.GetHoldType(weapon)
 				subClass = HOLDTYPE_TRANSLATOR[subClass] or subClass
 			end
 
@@ -189,7 +131,7 @@ function GM:TranslateActivity(client, act)
 				local act2 = tree[subClass][act][index]
 
 				if (type(act2) == "string") then
-					client.CalcSeqOverride = Player_LookupSequence(client, act2)
+					client.CalcSeqOverride = client.LookupSequence(client, act2)
 
 					return
 				end
@@ -202,33 +144,30 @@ function GM:TranslateActivity(client, act)
 	end
 end
 
-local Player_AnimRestartMainSequence = Player_Meta.AnimRestartMainSequence
-local Player_AnimRestartGestureSlot = Player_Meta.AnimResetGestureSlot
-
 function GM:DoAnimationEvent(client, event, data)
-	local class = getModelClass(Player_GetModel(client))
+	local class = nut.anim.getModelClass(client:GetModel())
 
 	if (class == "player") then
 		return self.BaseClass:DoAnimationEvent(client, event, data)
 	else
-		local weapon = Player_GetActiveWeapon(client)
+		local weapon = client:GetActiveWeapon()
 
 		if (IsValid(weapon)) then
-			local holdType = weapon.HoldType or Weapon_GetHoldType(weapon)
+			local holdType = weapon.HoldType or weapon:GetHoldType()
 			holdType = HOLDTYPE_TRANSLATOR[holdType] or holdType
 
-			local animation = nutAnim[class][holdType]
+			local animation = nut.anim[class][holdType]
 
 			if (event == PLAYERANIMEVENT_ATTACK_PRIMARY) then
-				Player_AnimRestartGesture(client, GESTURE_SLOT_ATTACK_AND_RELOAD, animation.attack or ACT_GESTURE_RANGE_ATTACK_SMG1, true)
+				client:AnimRestartGesture(GESTURE_SLOT_ATTACK_AND_RELOAD, animation.attack or ACT_GESTURE_RANGE_ATTACK_SMG1, true)
 
 				return ACT_VM_PRIMARYATTACK
 			elseif (event == PLAYERANIMEVENT_ATTACK_SECONDARY) then
-				Player_AnimRestartGesture(client, GESTURE_SLOT_ATTACK_AND_RELOAD, animation.attack or ACT_GESTURE_RANGE_ATTACK_SMG1, true)
+				client:AnimRestartGesture(GESTURE_SLOT_ATTACK_AND_RELOAD, animation.attack or ACT_GESTURE_RANGE_ATTACK_SMG1, true)
 
 				return ACT_VM_SECONDARYATTACK
 			elseif (event == PLAYERANIMEVENT_RELOAD) then
-				Player_AnimRestartGesture(client, GESTURE_SLOT_ATTACK_AND_RELOAD, animation.reload or ACT_GESTURE_RELOAD_SMG1, true)
+				client:AnimRestartGesture(GESTURE_SLOT_ATTACK_AND_RELOAD, animation.reload or ACT_GESTURE_RELOAD_SMG1, true)
 
 				return ACT_INVALID
 			elseif (event == PLAYERANIMEVENT_JUMP) then
@@ -236,11 +175,11 @@ function GM:DoAnimationEvent(client, event, data)
 				client.m_bFistJumpFrame = true
 				client.m_flJumpStartTime = CurTime()
 
-				Player_AnimRestartMainSequence(client)
+				client:AnimRestartMainSequence()
 
 				return ACT_INVALID
 			elseif (event == PLAYERANIMEVENT_CANCEL_RELOAD) then
-				Player_AnimRestartGestureSlot(client, GESTURE_SLOT_ATTACK_AND_RELOAD)
+				client:AnimResetGestureSlot(GESTURE_SLOT_ATTACK_AND_RELOAD)
 
 				return ACT_INVALID
 			end
@@ -260,17 +199,15 @@ local vectorAngle = FindMetaTable("Vector").Angle
 local normalizeAngle = math.NormalizeAngle
 local oldCalcSeqOverride
 
-local Vector_LengthSqr = Vector_Meta.LengthSqr
-
 function GM:HandlePlayerLanding(client, velocity, wasOnGround)
-	if (Player_GetMoveType(client) == MOVETYPE_NOCLIP) then return end
+	if (client:GetMoveType() == MOVETYPE_NOCLIP) then return end
 
-	if (Player_OnGround(client) and not wasOnGround) then
-		local length = Vector_LengthSqr(client.lastVelocity or velocity)
-		local animClass = getModelClass(Player_GetModel(client))
+	if (client:IsOnGround() and not wasOnGround) then
+		local length = (client.lastVelocity or velocity):LengthSqr()
+		local animClass = nut.anim.getModelClass(client:GetModel())
 		if (animClass ~= "player" and length < 100000) then return end
 
-		Player_AnimRestartGesture(client, GESTURE_SLOT_JUMP, ACT_LAND, true)
+		client:AnimRestartGesture(GESTURE_SLOT_JUMP, ACT_LAND, true)
 		return true
 	end
 end
@@ -281,14 +218,14 @@ function GM:CalcMainActivity(client, velocity)
 	oldCalcSeqOverride = client.CalcSeqOverride
 	client.CalcSeqOverride = -1
 
-	local animClass = getModelClass(Player_GetModel(client))
+	local animClass = nut.anim.getModelClass(client:GetModel())
 
 	if (animClass ~= "player") then
-		local eyeAngles = Player_EyeAngles(client)
+		local eyeAngles = client.EyeAngles(client)
 		local yaw = vectorAngle(velocity)[2]
 		local normalized = normalizeAngle(yaw - eyeAngles[2])
 
-		Player_SetPoseParameter(client, "move_yaw", normalized)
+		client.SetPoseParameter(client, "move_yaw", normalized)
 	end
 
 	if (
@@ -301,7 +238,7 @@ function GM:CalcMainActivity(client, velocity)
 		self:HandlePlayerDucking(client, velocity)
 	) then
 	else
-		local len2D = Vector_Length2DSqr(velocity)
+		local len2D = velocity:Length2DSqr()
 		if (len2D > 22500) then
 			client.CalcIdeal = ACT_MP_RUN
 		elseif (len2D > 0.25) then
@@ -309,13 +246,13 @@ function GM:CalcMainActivity(client, velocity)
 		end
 	end
 
-	client.m_bWasOnGround = Player_OnGround(client)
-	client.m_bWasNoclipping = Player_GetMoveType(client) == MOVETYPE_NOCLIP
-		and not Player_InVehicle(client)
+	client.m_bWasOnGround = client:IsOnGround()
+	client.m_bWasNoclipping = client:GetMoveType() == MOVETYPE_NOCLIP
+		and not client:InVehicle()
 	client.lastVelocity = velocity
 
 	if (CLIENT) then
-		Player_SetIK(client, false)
+		client:SetIK(false)
 	end
 
 	return client.CalcIdeal, client.nutForceSeq or oldCalcSeqOverride
@@ -341,7 +278,7 @@ function GM:CanPlayerUseChar(client, char)
 	local banned = char:getData("banned")
 
 	if (banned) then
-		if (type(banned) == "number" and banned < os.time()) then
+		if (isnumber(banned) and banned < os.time()) then
 			return
 		end
 
@@ -406,28 +343,33 @@ function GM:PhysgunPickup(client, entity)
 end
 
 function GM:Move(client, moveData)
-	local char = Player_GetNetVar(client, "char")
+	local char = client:getChar()
 
 	if (char) then
-		if (Player_GetMoveType(client) == MOVETYPE_WALK and Move_KeyDown(moveData, IN_WALK)) then
-			local mf, ms = 0, 0
-			local speed = Player_GetWalkSpeed(client)
-			local ratio = configGet("walkRatio")
+		if (client:getNetVar("actAng")) then
+			moveData:SetForwardSpeed(0)
+			moveData:SetSideSpeed(0)
+		end
 
-			if (Move_KeyDown(moveData, IN_FORWARD)) then
+		if (client:GetMoveType() == MOVETYPE_WALK and moveData:KeyDown(IN_WALK)) then
+			local mf, ms = 0, 0
+			local speed = client:GetWalkSpeed()
+			local ratio = nut.config.get("walkRatio")
+
+			if (moveData:KeyDown(IN_FORWARD)) then
 				mf = ratio
-			elseif (Move_KeyDown(moveData, IN_BACK)) then
+			elseif (moveData:KeyDown(IN_BACK)) then
 				mf = -ratio
 			end
 
-			if (Move_KeyDown(moveData, IN_MOVELEFT)) then
+			if (moveData:KeyDown(IN_MOVELEFT)) then
 				ms = -ratio
-			elseif (Move_KeyDown(moveData, IN_MOVERIGHT)) then
+			elseif (moveData:KeyDown(IN_MOVERIGHT)) then
 				ms = ratio
 			end
 
-			Move_SetForwardSpeed(moveData, mf * speed) 
-			Move_SetSideSpeed(moveData, ms * speed) 
+			moveData:SetForwardSpeed(mf * speed) 
+			moveData:SetSideSpeed(ms * speed) 
 		end
 	end
 end
