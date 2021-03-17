@@ -259,6 +259,8 @@ function ITEM:interact(action, client, entity, data)
 		return false
 	end
 
+	hook.Run("PrePlayerInteractItem", client, action, self)
+
 	local result
 	-- TODO: better solution for hooking onto these - something like mixins?
 	if (isfunction(self.hooks[action])) then
