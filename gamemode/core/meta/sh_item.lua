@@ -72,13 +72,13 @@ function ITEM:call(method, client, entity, ...)
 		self.player = oldPlayer
 		self.entity = oldEntity
 
+		hook.Run("ItemFunctionCalled", self, method, client, entity, results)
+		
 		return unpack(results)
 	end
 
 	self.player = oldPlayer
 	self.entity = oldEntity
-
-	hook.Run("ItemFunctionCalled", self, method, client, entity, ...)
 end
 
 function ITEM:getOwner()
