@@ -27,6 +27,8 @@ function Inventory:addItem(item)
 		_invID = id
 	}, nil, "items", "_itemID = "..item:getID())
 
+	hook.Run("InventoryItemAdded", self, item)
+
 	-- Replicate adding the item to this inventory client-side
 	self:syncItemAdded(item)
 
@@ -111,6 +113,8 @@ function Inventory:removeItem(itemID, preserveItem)
 	if (instance) then
 		instance.invID = 0
 		self.items[itemID] = nil
+
+		hook.Run("InventoryItemRemoved", self, instance, preserveItem)
 
 		net.Start("nutInventoryRemove")
 			net.WriteUInt(itemID, 32)
