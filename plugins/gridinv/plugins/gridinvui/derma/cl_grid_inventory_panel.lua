@@ -157,7 +157,7 @@ function PANEL:drawHeldItemRectangle()
 	for itemID, invItem in pairs(self.inventory.items) do
 		if (item:getID() == itemID) then continue end
 
-		local targetX, targetY = invItem:getData("x") - 1, invItem:getData("y") - 1
+		local targetX, targetY = invItem:getData("x", 1) - 1, invItem:getData("y", 1) - 1
 		local targetW, targetH = invItem.width - 1, invItem.height - 1
 
 		if (
