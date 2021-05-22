@@ -347,7 +347,7 @@ do
 	playerMeta.SteamName = playerMeta.steamName
 
 	function playerMeta:getChar()
-		return nut.char.loaded[self.GetNW2Int(self, "char")]
+		return nut.char.loaded[self:GetNW2Int("char")]
 	end
 
 	function playerMeta:Name()
