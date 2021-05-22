@@ -105,7 +105,7 @@ if (SERVER) then
 			-- Set the faction, model, and character index for the player.
 			client:SetModel(self:getModel())
 			client:SetTeam(self:getFaction())
-			client:setNetVar("char", self:getID())
+			client:SetNW2Int("char", self:getID())
 
 			-- Apply saved body groups.
 			for k, v in pairs(self:getData("groups", {})) do
@@ -145,7 +145,7 @@ if (SERVER) then
 			netstream.Start(client, "charKick", id, isCurrentChar)
 
 			if (isCurrentChar) then
-				client:setNetVar("char", nil)
+				client:SetNW2Int("char", nil)
 				client:Spawn()
 			end
 		end

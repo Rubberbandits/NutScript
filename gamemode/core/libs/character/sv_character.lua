@@ -160,7 +160,7 @@ end
 local function removePlayer(client)
 	if (client:getChar()) then
 		client:KillSilent()
-		client:setNetVar("char", nil)
+		client:SetNW2Int("char", nil)
 		client:Spawn()
 		netstream.Start(client, "charKick", nil, true)
 	end
