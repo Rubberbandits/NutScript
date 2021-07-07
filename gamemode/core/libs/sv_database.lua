@@ -294,7 +294,7 @@ modules.mysqloo = {
 
 				for name, type in pairs(preparedStatement.values) do
 					local arg = arguments[index]
-					if arg == nil then
+					if arg == NULL then
 						prepObj:setNull(index)
 
 						index = index + 1
