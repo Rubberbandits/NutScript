@@ -293,12 +293,20 @@ modules.mysqloo = {
 				local index = 1
 
 				for name, type in pairs(preparedStatement.values) do
+					local arg = arguments[index]
+					if arg == nil then
+						prepObj:setNull(index)
+
+						index = index + 1
+						continue
+					end
+
 					if (type == MYSQLOO_INTEGER) then
-						prepObj:setNumber(index, arguments[index]) 
+						prepObj:setNumber(index, arg) 
 					elseif (type == MYSQLOO_STRING) then
-						prepObj:setString(index, nut.db.convertDataType(arguments[index], true)) 
+						prepObj:setString(index, nut.db.convertDataType(arg, true)) 
 					elseif (type == MYSQLOO_BOOL) then
-						prepObj:setBoolean(index, arguments[index]) 
+						prepObj:setBoolean(index, arg) 
 					end
 					
 					index = index + 1
